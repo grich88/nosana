@@ -26,17 +26,11 @@ services:
         value: "Content-Type, Authorization"
 
   # Frontend Static Site
-  - type: static
+  - type: web
     name: nosana-github-insights-frontend
+    env: static
     buildCommand: cd frontend && npm install && npm run build
-    publishPath: frontend/build
-    headers:
-      - path: /*
-        name: Cache-Control
-        value: public, max-age=31536000, immutable
-      - path: /
-        name: Cache-Control
-        value: public, max-age=0, must-revalidate
+    staticPublishPath: frontend/build
     routes:
       - type: rewrite
         source: /*
