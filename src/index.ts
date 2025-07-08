@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { SecurityAnalyzer } from './security/SecurityAnalyzer.js';
@@ -45,7 +45,7 @@ async function getGitHubRepoInfo(owner: string, repo: string) {
 }
 
 // Security analysis endpoint
-app.post('/security', async (req, res) => {
+app.post('/security', async (req: Request, res: Response) => {
   try {
     const { message } = req.body;
     
@@ -346,7 +346,7 @@ function formatRepositoryAnalysis(data: any): string {
 }
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/health', (req: Request, res: Response) => {
   res.json({ 
     status: 'healthy', 
     service: 'nosana-github-insights-agent',
@@ -355,7 +355,7 @@ app.get('/health', (req, res) => {
 });
 
 // Main agent endpoint
-app.post('/chat', async (req, res) => {
+app.post('/chat', async (req: Request, res: Response) => {
   try {
     const { message } = req.body;
     
@@ -412,7 +412,7 @@ Examples:
 });
 
 // Agent info endpoint
-app.get('/agent-info', (req, res) => {
+app.get('/agent-info', (req: Request, res: Response) => {
   res.json({
     name: 'GitHub Insights Agent',
     description: 'AI agent that provides comprehensive GitHub repository insights with health and security assessments',

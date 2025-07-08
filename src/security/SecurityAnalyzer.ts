@@ -35,7 +35,7 @@ export interface CodeQualityIssue {
 
 export interface LicenseRisk {
   license: string;
-  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   description: string;
   compatibility: string;
 }
@@ -247,8 +247,8 @@ export class SecurityAnalyzer {
         const lineNumber = beforeMatch.split('\n').length;
         
         issues.push({
-          type: vuln.type,
-          severity: vuln.severity,
+          type: vuln.type as 'SQL_INJECTION' | 'XSS' | 'HARDCODED_SECRET' | 'INSECURE_CONFIG' | 'WEAK_CRYPTO',
+          severity: vuln.severity as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
           description: this.getVulnerabilityDescription(vuln.type),
           file: filename,
           line: lineNumber,
@@ -421,7 +421,7 @@ export class SecurityAnalyzer {
       'INSECURE_CONFIG': 'Insecure configuration detected',
       'WEAK_CRYPTO': 'Weak cryptographic algorithm in use'
     };
-    return descriptions[type] || 'Security vulnerability detected';
+    return descriptions[type as keyof typeof descriptions] || 'Security vulnerability detected';
   }
 
   private getVulnerabilityRecommendation(type: string): string {
@@ -432,7 +432,7 @@ export class SecurityAnalyzer {
       'INSECURE_CONFIG': 'Enable secure configuration options',
       'WEAK_CRYPTO': 'Upgrade to stronger cryptographic algorithms'
     };
-    return recommendations[type] || 'Follow security best practices';
+    return recommendations[type as keyof typeof recommendations] || 'Follow security best practices';
   }
 
   private getLicenseCompatibility(riskLevel: string): string {
