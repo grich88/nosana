@@ -18,7 +18,7 @@ services:
   # Frontend Static Site
   - type: static
     name: nosana-github-insights-frontend
-    buildCommand: bash -c "cd frontend && npm ci && npm run build"
+    buildCommand: cd frontend && npm ci && npm run build
     publishPath: frontend/build
     pullRequestPreviewsEnabled: false
     routes:
