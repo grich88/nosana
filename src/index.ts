@@ -971,23 +971,872 @@ app.post('/search-vulnerability-fixes', async (req: Request, res: Response) => {
   }
 });
 
-// Temporary stub functions for advanced features
+// Replace stub with actual GitHub code search implementation
 async function searchGitHubForFixes(message: string, code?: string, language?: string, errorType?: string): Promise<any[]> {
-  console.log('Code fix search requested - feature in development');
-  return [];
+  const searchQueries = buildSearchQueries(message, code, language, errorType);
+  const allResults: any[] = [];
+
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'Nosana-GitHub-Insights-Agent',
+  };
+  
+  if (process.env.GITHUB_TOKEN) {
+    headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+  }
+
+  for (const query of searchQueries.slice(0, 3)) { // Limit to 3 queries to avoid rate limits
+    try {
+      // Search in code
+      const codeSearchUrl = `https://api.github.com/search/code?q=${encodeURIComponent(query)}&sort=indexed&order=desc&per_page=10`;
+      const codeResponse = await fetch(codeSearchUrl, { headers });
+      
+      if (codeResponse.ok) {
+        const codeData = await codeResponse.json() as any;
+        if (codeData.items) {
+          allResults.push(...codeData.items.map((item: any) => ({
+            ...item,
+            type: 'code',
+            query: query
+          })));
+        }
+      }
+
+      // Search in issues for solutions
+      const issueSearchUrl = `https://api.github.com/search/issues?q=${encodeURIComponent(query + ' is:issue state:closed')}&sort=comments&order=desc&per_page=5`;
+      const issueResponse = await fetch(issueSearchUrl, { headers });
+      
+      if (issueResponse.ok) {
+        const issueData = await issueResponse.json() as any;
+        if (issueData.items) {
+          allResults.push(...issueData.items.map((item: any) => ({
+            ...item,
+            type: 'issue',
+            query: query
+          })));
+        }
+      }
+
+      // Add delay to respect rate limits
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+    } catch (error) {
+      console.error(`Error searching for query "${query}":`, error);
+    }
+  }
+
+  // Remove duplicates and sort by relevance
+  const uniqueResults = removeDuplicateResults(allResults);
+  return sortByRelevance(uniqueResults, message, code).slice(0, 20);
+}
+
+function buildSearchQueries(message: string, code?: string, language?: string, errorType?: string): string[] {
+  const queries: string[] = [];
+  
+  // Extract keywords from the message
+  const keywords = extractCodeKeywords(message);
+  
+  // Base query from message
+  if (language) {
+    queries.push(`${message} language:${language}`);
+  } else {
+    queries.push(message);
+  }
+
+  // If code is provided, extract key patterns
+  if (code) {
+    const codeKeywords = extractCodeKeywords(code);
+    
+    // Search for similar code patterns
+    codeKeywords.slice(0, 2).forEach(keyword => {
+      if (language) {
+        queries.push(`${keyword} language:${language}`);
+      } else {
+        queries.push(keyword);
+      }
+    });
+
+    // Search for error patterns if they exist
+    const errorPatterns = code.match(/error|exception|failed|undefined|null|cannot/gi);
+    if (errorPatterns) {
+      queries.push(`${errorPatterns[0]} ${language || ''} fix solution`.trim());
+    }
+  }
+
+  // Error type specific search
+  if (errorType) {
+    queries.push(`${errorType} ${language || ''} fix solution`.trim());
+  }
+
+  // Add common fix-related terms
+  keywords.slice(0, 2).forEach(keyword => {
+    queries.push(`${keyword} fix solution`);
+    if (language) {
+      queries.push(`${keyword} ${language} solution`);
+    }
+  });
+
+  return [...new Set(queries)]; // Remove duplicates
+}
+
+function extractCodeKeywords(text: string): string[] {
+  // Extract meaningful keywords from code or text
+  const keywords: string[] = [];
+  
+  // Common programming terms and patterns
+  const patterns = [
+    /\b[a-zA-Z_][a-zA-Z0-9_]*\(/g, // Function calls
+    /\b[A-Z][a-zA-Z0-9]*Error\b/g, // Error types
+    /\b[a-zA-Z_][a-zA-Z0-9_]*Exception\b/g, // Exception types
+    /\bimport\s+[a-zA-Z_][a-zA-Z0-9_.]*\b/g, // Import statements
+    /\brequire\(['"][^'"]+['"]\)/g, // Require statements
+    /\b[a-zA-Z_][a-zA-Z0-9_]*\.[a-zA-Z_][a-zA-Z0-9_]*\b/g, // Method calls
+  ];
+
+  patterns.forEach(pattern => {
+    const matches = text.match(pattern);
+    if (matches) {
+      keywords.push(...matches);
+    }
+  });
+
+  // Extract simple words that might be relevant
+  const words = text.toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .split(/\s+/)
+    .filter(word => 
+      word.length > 3 && 
+      !['function', 'const', 'let', 'var', 'return', 'this', 'that', 'with', 'from', 'import'].includes(word)
+    );
+
+  keywords.push(...words);
+
+  return [...new Set(keywords)].slice(0, 10); // Return unique keywords, limit to 10
+}
+
+function removeDuplicateResults(results: any[]): any[] {
+  const seen = new Set();
+  return results.filter(result => {
+    const key = result.html_url || result.url || result.path;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function sortByRelevance(results: any[], query: string, code?: string): any[] {
+  return results.sort((a, b) => {
+    const scoreA = calculateRelevanceScore(a, query, code);
+    const scoreB = calculateRelevanceScore(b, query, code);
+    return scoreB - scoreA;
+  });
+}
+
+function calculateRelevanceScore(result: any, query: string, code?: string): number {
+  let score = 0;
+  
+  const text = `${result.name || ''} ${result.title || ''} ${result.body || ''} ${result.path || ''}`.toLowerCase();
+  const queryWords = query.toLowerCase().split(/\s+/);
+  
+  // Score based on query word matches
+  queryWords.forEach(word => {
+    if (text.includes(word)) {
+      score += 2;
+    }
+  });
+
+  // Boost score for certain indicators
+  if (result.type === 'issue' && text.includes('solved')) score += 5;
+  if (result.type === 'issue' && text.includes('fixed')) score += 5;
+  if (result.type === 'code' && result.name?.includes('fix')) score += 3;
+  if (result.comments > 5) score += 2;
+  if (result.score) score += Math.log(result.score); // GitHub search relevance score
+
+  // Boost recent items
+  if (result.updated_at) {
+    const daysSinceUpdate = (Date.now() - new Date(result.updated_at).getTime()) / (1000 * 60 * 60 * 24);
+    if (daysSinceUpdate < 365) score += Math.max(0, 365 - daysSinceUpdate) / 100;
+  }
+
+  return score;
 }
 
 async function analyzeCodeFixesWithAI(searchResults: any[], message: string, code?: string, language?: string): Promise<string> {
-  return `🔍 **Code Fix Search**\n\n🚧 This advanced feature is currently being enhanced!\n\nYour query: "${message}"\n\n💡 **Coming Soon:**\n- GitHub-wide code search\n- AI-powered fix suggestions\n- Pattern matching across repositories\n- GPU-accelerated analysis\n\nIn the meantime, try our other features like Security Analysis, Issues Analysis, or Repository Overview!`;
+  if (searchResults.length === 0) {
+    return `🔍 **Code Fix Search Results**\n\n❌ **No direct matches found**\n\nYour query: "${message}"\n\n💡 **Suggestions:**\n- Try rephrasing your search with different keywords\n- Check if the issue might be language-specific\n- Consider searching for the core concept rather than exact error messages\n- Look for similar patterns in the technology documentation\n\n🎯 **Alternative approaches:**\n- Break down the problem into smaller parts\n- Search for general patterns rather than specific implementations\n- Try different programming languages that might have similar solutions`;
+  }
+
+  const codeResults = searchResults.filter(r => r.type === 'code');
+  const issueResults = searchResults.filter(r => r.type === 'issue');
+
+  let analysis = `🔍 **Code Fix Search Results**\n\n`;
+  analysis += `📊 **Search Summary**\n`;
+  analysis += `- Query: "${message}"\n`;
+  analysis += `- Total Results: ${searchResults.length}\n`;
+  analysis += `- Code Examples: ${codeResults.length}\n`;
+  analysis += `- Solved Issues: ${issueResults.length}\n`;
+  if (language) analysis += `- Language Filter: ${language}\n`;
+  analysis += '\n';
+
+  // Top code examples
+  if (codeResults.length > 0) {
+    analysis += `💻 **Code Examples & Implementations**\n\n`;
+    
+    const topCodeResults = codeResults.slice(0, 5);
+    topCodeResults.forEach((result, index) => {
+      analysis += `${index + 1}. **${result.name}** (${result.repository?.full_name || 'Unknown repo'})\n`;
+      analysis += `   📁 Path: \`${result.path}\`\n`;
+      analysis += `   🔗 [View Code](${result.html_url})\n`;
+      
+      // Extract file extension for language detection
+      const fileExt = result.path?.split('.').pop()?.toLowerCase();
+      if (fileExt) {
+        const langMap: Record<string, string> = {
+          'js': 'JavaScript', 'ts': 'TypeScript', 'py': 'Python', 
+          'java': 'Java', 'cpp': 'C++', 'c': 'C', 'go': 'Go',
+          'rs': 'Rust', 'php': 'PHP', 'rb': 'Ruby', 'swift': 'Swift'
+        };
+        if (langMap[fileExt]) {
+          analysis += `   💾 Language: ${langMap[fileExt]}\n`;
+        }
+      }
+      
+      // Add relevance indicators
+      if (result.score && result.score > 10) {
+        analysis += `   ⭐ High relevance match\n`;
+      }
+      
+      analysis += '\n';
+    });
+  }
+
+  // Solved issues and discussions
+  if (issueResults.length > 0) {
+    analysis += `🐛 **Solved Issues & Solutions**\n\n`;
+    
+    const topIssueResults = issueResults.slice(0, 5);
+    topIssueResults.forEach((result, index) => {
+      analysis += `${index + 1}. **${result.title}**\n`;
+      analysis += `   📍 Repository: ${result.repository_url?.split('/').slice(-2).join('/') || 'Unknown'}\n`;
+      analysis += `   💬 Comments: ${result.comments} | 👍 Reactions: ${result.reactions?.total_count || 0}\n`;
+      analysis += `   🔗 [View Discussion](${result.html_url})\n`;
+      
+      // Analyze issue for solution indicators
+      const bodyText = result.body?.toLowerCase() || '';
+      if (bodyText.includes('solved') || bodyText.includes('fixed')) {
+        analysis += `   ✅ Contains solution markers\n`;
+      }
+      if (result.comments > 5) {
+        analysis += `   🗣️ Active discussion with multiple solutions\n`;
+      }
+      
+      analysis += '\n';
+    });
+  }
+
+  // AI-generated recommendations
+  analysis += `🤖 **AI Analysis & Recommendations**\n\n`;
+
+  // Pattern analysis
+  const commonPatterns = analyzeSearchPatterns(searchResults, message);
+  if (commonPatterns.length > 0) {
+    analysis += `🔍 **Common Solution Patterns:**\n`;
+    commonPatterns.forEach(pattern => {
+      analysis += `- ${pattern}\n`;
+    });
+    analysis += '\n';
+  }
+
+  // Language-specific advice
+  if (language) {
+    analysis += `🎯 **${language} Specific Guidance:**\n`;
+    analysis += getLanguageSpecificAdvice(language, message, searchResults);
+    analysis += '\n';
+  }
+
+  // Fix suggestions based on search results
+  const fixSuggestions = generateAIFixRecommendations(searchResults, message, code, language);
+  if (fixSuggestions.length > 0) {
+    analysis += `💡 **Recommended Fix Approaches:**\n`;
+    fixSuggestions.forEach((suggestion, index) => {
+      analysis += `${index + 1}. ${suggestion}\n`;
+    });
+    analysis += '\n';
+  }
+
+  // Next steps
+  analysis += `🚀 **Next Steps:**\n`;
+  if (codeResults.length > 0) {
+    analysis += `- Examine the top ${Math.min(3, codeResults.length)} code examples for implementation patterns\n`;
+  }
+  if (issueResults.length > 0) {
+    analysis += `- Read through the discussions in solved issues for context\n`;
+  }
+  analysis += `- Try adapting the solutions to your specific use case\n`;
+  analysis += `- Test implementations in a safe environment first\n`;
+  if (language) {
+    analysis += `- Look for ${language}-specific documentation and best practices\n`;
+  }
+
+  return analysis;
+}
+
+function analyzeSearchPatterns(results: any[], query: string): string[] {
+  const patterns: string[] = [];
+  
+  // Analyze file types and languages
+  const languages = new Map<string, number>();
+  const fileTypes = new Map<string, number>();
+  
+  results.forEach(result => {
+    if (result.path) {
+      const extension = result.path.split('.').pop()?.toLowerCase();
+      if (extension) {
+        fileTypes.set(extension, (fileTypes.get(extension) || 0) + 1);
+      }
+    }
+    
+    if (result.language) {
+      languages.set(result.language, (languages.get(result.language) || 0) + 1);
+    }
+  });
+
+  // Most common language
+  if (languages.size > 0) {
+    const topLang = Array.from(languages.entries()).sort((a, b) => b[1] - a[1])[0];
+    patterns.push(`Most solutions found in ${topLang[0]} (${topLang[1]} examples)`);
+  }
+
+  // Repository patterns
+  const repositories = new Map<string, number>();
+  results.forEach(result => {
+    const repo = result.repository?.full_name || result.repository_url?.split('/').slice(-2).join('/');
+    if (repo) {
+      repositories.set(repo, (repositories.get(repo) || 0) + 1);
+    }
+  });
+
+  if (repositories.size > 0) {
+    const topRepo = Array.from(repositories.entries()).sort((a, b) => b[1] - a[1])[0];
+    if (topRepo[1] > 1) {
+      patterns.push(`Multiple solutions found in ${topRepo[0]} repository`);
+    }
+  }
+
+  // Issue vs code pattern
+  const issueCount = results.filter(r => r.type === 'issue').length;
+  const codeCount = results.filter(r => r.type === 'code').length;
+  
+  if (issueCount > codeCount * 2) {
+    patterns.push('Problem commonly discussed in issues - likely a well-known challenge');
+  } else if (codeCount > issueCount * 2) {
+    patterns.push('Many code implementations available - active development pattern');
+  }
+
+  return patterns;
+}
+
+function getLanguageSpecificAdvice(language: string, query: string, results: any[]): string {
+  const langAdvice: Record<string, string> = {
+    'javascript': 'Check for async/await patterns, promise handling, and modern ES6+ syntax in solutions',
+    'typescript': 'Look for type definitions and interfaces that might solve compilation issues',
+    'python': 'Consider virtual environment setup, package versions, and Python version compatibility',
+    'java': 'Check classpath issues, dependency management, and Java version compatibility',
+    'react': 'Look for hooks usage, component lifecycle methods, and state management patterns',
+    'node': 'Consider npm package versions, async patterns, and environment configuration',
+    'go': 'Check for goroutine patterns, error handling, and module dependencies',
+    'rust': 'Look for ownership patterns, lifetime annotations, and cargo dependency issues'
+  };
+
+  return langAdvice[language.toLowerCase()] || 'Review language-specific documentation and community best practices for similar problems';
+}
+
+function generateAIFixRecommendations(searchResults: any[], message: string, code?: string, language?: string): string[] {
+  const recommendations: string[] = [];
+  
+  // Based on search results content
+  const hasAsyncResults = searchResults.some(r => 
+    (r.path?.includes('async') || r.title?.includes('async') || r.body?.includes('async'))
+  );
+  
+  const hasErrorHandling = searchResults.some(r => 
+    (r.path?.includes('error') || r.title?.includes('error') || r.body?.includes('error'))
+  );
+
+  const hasTestResults = searchResults.some(r => 
+    (r.path?.includes('test') || r.path?.includes('spec'))
+  );
+
+  // Generate contextual recommendations
+  if (message.toLowerCase().includes('error') || message.toLowerCase().includes('fail')) {
+    recommendations.push('Add comprehensive error handling and logging to identify the root cause');
+  }
+
+  if (hasAsyncResults && (language === 'javascript' || language === 'typescript')) {
+    recommendations.push('Check async/await usage and promise chains for proper error handling');
+  }
+
+  if (code && code.includes('undefined')) {
+    recommendations.push('Add null/undefined checks and default values for variables');
+  }
+
+  if (hasTestResults) {
+    recommendations.push('Write unit tests to reproduce and validate the fix');
+  }
+
+  if (language === 'python' && message.toLowerCase().includes('import')) {
+    recommendations.push('Check virtual environment setup and package installation');
+  }
+
+  if (language === 'javascript' && message.toLowerCase().includes('module')) {
+    recommendations.push('Verify module resolution and package.json configuration');
+  }
+
+  // Generic recommendations based on common patterns
+  recommendations.push('Break down the problem into smaller, testable components');
+  recommendations.push('Review the documentation for the specific library or framework involved');
+  
+  if (searchResults.length > 5) {
+    recommendations.push('Compare multiple solutions to understand different approaches');
+  }
+
+  return recommendations.slice(0, 5); // Limit to top 5 recommendations
 }
 
 async function searchForBountyIssues(skills?: string[], language?: string, difficulty?: string): Promise<any[]> {
-  console.log('Bounty search requested - feature in development');
-  return [];
+  const allBounties: any[] = [];
+  
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'Nosana-GitHub-Insights-Agent',
+  };
+  
+  if (process.env.GITHUB_TOKEN) {
+    headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+  }
+
+  // Build search queries for bounty opportunities
+  const bountyQueries = [
+    'label:"bounty" is:issue state:open',
+    'label:"reward" is:issue state:open',
+    'label:"$" is:issue state:open',
+    'label:"money" is:issue state:open',
+    'label:"prize" is:issue state:open',
+    'label:"paid" is:issue state:open',
+    'label:"compensation" is:issue state:open',
+    '"bounty" in:title is:issue state:open',
+    '"reward" in:title is:issue state:open',
+    '"$" in:title is:issue state:open',
+  ];
+
+  // Add language-specific searches
+  if (language) {
+    bountyQueries.push(`language:${language} label:"bounty" is:issue state:open`);
+    bountyQueries.push(`language:${language} label:"help wanted" label:"good first issue" is:issue state:open`);
+  }
+
+  // Add skill-based searches
+  if (skills && skills.length > 0) {
+    skills.forEach(skill => {
+      bountyQueries.push(`"${skill}" label:"bounty" is:issue state:open`);
+      bountyQueries.push(`"${skill}" label:"help wanted" is:issue state:open`);
+    });
+  }
+
+  // Add difficulty-based searches
+  if (difficulty) {
+    const difficultyLabels = {
+      'easy': ['easy', 'beginner', 'good first issue', 'starter'],
+      'medium': ['medium', 'intermediate'],
+      'hard': ['hard', 'difficult', 'advanced', 'expert']
+    };
+    
+    const labels = difficultyLabels[difficulty.toLowerCase() as keyof typeof difficultyLabels] || [];
+    labels.forEach(label => {
+      bountyQueries.push(`label:"${label}" is:issue state:open`);
+    });
+  }
+
+  // Search for bounty issues
+  for (const query of bountyQueries.slice(0, 5)) { // Limit queries to avoid rate limits
+    try {
+      const searchUrl = `https://api.github.com/search/issues?q=${encodeURIComponent(query)}&sort=created&order=desc&per_page=10`;
+      const response = await fetch(searchUrl, { headers });
+      
+      if (response.ok) {
+        const data = await response.json() as any;
+        if (data.items) {
+          // Filter and enhance results
+          const bountyItems = data.items.map((item: any) => ({
+            ...item,
+            estimated_value: estimateBountyValue(item),
+            difficulty_level: getBountyDifficulty(item),
+            skill_match: calculateSkillMatch(item, skills, language)
+          }));
+          
+          allBounties.push(...bountyItems);
+        }
+      }
+
+      // Rate limit protection
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+    } catch (error) {
+      console.error(`Error searching for bounties with query "${query}":`, error);
+    }
+  }
+
+  // Remove duplicates and sort by relevance
+  const uniqueBounties = removeDuplicateResults(allBounties);
+  
+  // Sort by skill match and estimated value
+  return uniqueBounties
+    .sort((a, b) => {
+      // Prioritize by skill match, then by estimated value
+      const skillDiff = b.skill_match - a.skill_match;
+      if (skillDiff !== 0) return skillDiff;
+      
+      const valueA = extractNumericValue(a.estimated_value);
+      const valueB = extractNumericValue(b.estimated_value);
+      return valueB - valueA;
+    })
+    .slice(0, 15); // Return top 15 opportunities
+}
+
+function estimateBountyValue(issue: any): string {
+  const title = issue.title?.toLowerCase() || '';
+  const body = issue.body?.toLowerCase() || '';
+  const text = `${title} ${body}`;
+
+  // Look for explicit monetary values
+  const moneyMatches = text.match(/\$(\d+(?:,\d{3})*(?:\.\d{2})?)/g);
+  if (moneyMatches) {
+    const amounts = moneyMatches.map(match => {
+      const numStr = match.replace(/[$,]/g, '');
+      return parseFloat(numStr);
+    });
+    const maxAmount = Math.max(...amounts);
+    return `$${maxAmount.toLocaleString()}`;
+  }
+
+  // Look for currency symbols and amounts
+  const currencyPatterns = [
+    /(\d+)\s*USD/gi,
+    /(\d+)\s*EUR/gi,
+    /(\d+)\s*bitcoin/gi,
+    /(\d+)\s*BTC/gi,
+    /(\d+)\s*ETH/gi
+  ];
+
+  for (const pattern of currencyPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      return `$${match[1]}`;
+    }
+  }
+
+  // Estimate based on labels and complexity
+  const labels = issue.labels?.map((label: any) => label.name.toLowerCase()) || [];
+  
+  if (labels.some((label: any) => label.includes('critical') || label.includes('urgent'))) {
+    return '$500-2000';
+  }
+  
+  if (labels.some((label: any) => label.includes('bug') || label.includes('fix'))) {
+    return '$100-500';
+  }
+  
+  if (labels.some((label: any) => label.includes('feature') || label.includes('enhancement'))) {
+    return '$200-1000';
+  }
+  
+  if (labels.some((label: any) => label.includes('good first issue') || label.includes('beginner'))) {
+    return '$50-200';
+  }
+
+  // Default estimation based on issue engagement
+  const engagement = (issue.comments || 0) + (issue.reactions?.total_count || 0);
+  if (engagement > 20) return '$300-800';
+  if (engagement > 10) return '$150-400';
+  if (engagement > 5) return '$75-200';
+  
+  return '$25-100';
+}
+
+function getBountyDifficulty(issue: any): string {
+  const title = issue.title?.toLowerCase() || '';
+  const body = issue.body?.toLowerCase() || '';
+  const text = `${title} ${body}`;
+  const labels = issue.labels?.map((label: any) => label.name.toLowerCase()) || [];
+
+  // Check labels first
+  if (labels.some((label: any) => 
+    label.includes('beginner') || 
+    label.includes('good first issue') || 
+    label.includes('easy') ||
+    label.includes('starter')
+  )) {
+    return 'Easy';
+  }
+
+  if (labels.some((label: any) => 
+    label.includes('advanced') || 
+    label.includes('expert') || 
+    label.includes('hard') ||
+    label.includes('complex')
+  )) {
+    return 'Hard';
+  }
+
+  // Analyze content complexity
+  const complexityIndicators = [
+    'architecture', 'algorithm', 'optimization', 'performance', 'security',
+    'refactor', 'migrate', 'implement', 'design', 'system'
+  ];
+
+  const easyIndicators = [
+    'typo', 'documentation', 'readme', 'comment', 'example',
+    'test', 'small', 'minor', 'simple'
+  ];
+
+  const complexCount = complexityIndicators.filter(indicator => text.includes(indicator)).length;
+  const easyCount = easyIndicators.filter(indicator => text.includes(indicator)).length;
+
+  if (easyCount > complexCount) return 'Easy';
+  if (complexCount > 2) return 'Hard';
+  
+  return 'Medium';
+}
+
+function calculateSkillMatch(bounty: any, skills?: string[], language?: string): number {
+  let matchScore = 0;
+  
+  const title = bounty.title?.toLowerCase() || '';
+  const body = bounty.body?.toLowerCase() || '';
+  const text = `${title} ${body}`;
+  const labels = bounty.labels?.map((label: any) => label.name.toLowerCase()) || [];
+
+  // Language match
+  if (language) {
+    if (text.includes(language.toLowerCase()) || 
+        labels.some((label: any) => label.includes(language.toLowerCase()))) {
+      matchScore += 30;
+    }
+  }
+
+  // Skills match
+  if (skills && skills.length > 0) {
+    skills.forEach(skill => {
+      const skillLower = skill.toLowerCase();
+      if (text.includes(skillLower) || 
+          labels.some((label: any) => label.includes(skillLower))) {
+        matchScore += 20;
+      }
+    });
+  }
+
+  // Repository language match
+  if (language && bounty.repository_url) {
+    // Note: We would need to fetch repository details for language info
+    // For now, we'll give a moderate boost if it seems relevant
+    matchScore += 10;
+  }
+
+  // Engagement boost (shows community interest)
+  const engagement = (bounty.comments || 0) + (bounty.reactions?.total_count || 0);
+  matchScore += Math.min(engagement, 10); // Cap at 10 points
+
+  return matchScore;
+}
+
+function extractNumericValue(valueString: string): number {
+  const match = valueString.match(/\$?(\d+(?:,\d{3})*(?:\.\d{2})?)/);
+  if (match) {
+    return parseFloat(match[1].replace(/,/g, ''));
+  }
+  
+  // For range estimates, take the average
+  const rangeMatch = valueString.match(/\$?(\d+)-(\d+)/);
+  if (rangeMatch) {
+    const min = parseFloat(rangeMatch[1]);
+    const max = parseFloat(rangeMatch[2]);
+    return (min + max) / 2;
+  }
+  
+  return 0;
 }
 
 async function analyzeBountiesWithAI(bountyIssues: any[], skills?: string[], language?: string): Promise<string> {
-  return `💰 **Bounty Hunter**\n\n🚧 This feature is being enhanced for better bounty discovery!\n\n🎯 **What You Can Expect:**\n- Real-time bounty issue scanning\n- Skill-based matching\n- Earnings calculator\n- Direct links to opportunities\n\nCheck back soon for the full bounty hunting experience!`;
+  if (bountyIssues.length === 0) {
+    return `💰 **Bounty Hunter Results**\n\n❌ **No bounty opportunities found**\n\n💡 **This could mean:**\n- Very limited bounty programs in your specified areas\n- Most bounties are already claimed\n- Try broadening your search criteria\n\n🎯 **Suggestions:**\n- Remove language or skill filters to see more opportunities\n- Look for "help wanted" issues that might lead to compensation\n- Check platforms like Gitcoin, IssueHunt, or Bountysource\n- Consider contributing to open source to build reputation first\n\n🚀 **Alternative approaches:**\n- Freelance platforms (Upwork, Freelancer)\n- Bug bounty programs (HackerOne, Bugcrowd)\n- Contest platforms (TopCoder, Codeforces)`;
+  }
+
+  let analysis = `💰 **Bounty Hunter Results**\n\n`;
+  
+  // Summary stats
+  const totalEstimatedValue = bountyIssues.reduce((sum, bounty) => {
+    return sum + extractNumericValue(bounty.estimated_value);
+  }, 0);
+
+  const difficultyDistribution = {
+    easy: bountyIssues.filter(b => b.difficulty_level === 'Easy').length,
+    medium: bountyIssues.filter(b => b.difficulty_level === 'Medium').length,
+    hard: bountyIssues.filter(b => b.difficulty_level === 'Hard').length
+  };
+
+  analysis += `📊 **Search Summary**\n`;
+  analysis += `- Total Opportunities: ${bountyIssues.length}\n`;
+  analysis += `- Estimated Total Value: $${totalEstimatedValue.toLocaleString()}\n`;
+  analysis += `- Average per Bounty: $${Math.round(totalEstimatedValue / bountyIssues.length).toLocaleString()}\n`;
+  if (skills?.length) analysis += `- Skills Searched: ${skills.join(', ')}\n`;
+  if (language) analysis += `- Language Filter: ${language}\n`;
+  analysis += '\n';
+
+  // Difficulty breakdown
+  analysis += `🎯 **Difficulty Distribution**\n`;
+  analysis += `- 🟢 Easy: ${difficultyDistribution.easy} bounties\n`;
+  analysis += `- 🟡 Medium: ${difficultyDistribution.medium} bounties\n`;
+  analysis += `- 🔴 Hard: ${difficultyDistribution.hard} bounties\n\n`;
+
+  // Top opportunities
+  analysis += `🏆 **Top Bounty Opportunities**\n\n`;
+  const topBounties = bountyIssues.slice(0, 8);
+  
+  topBounties.forEach((bounty, index) => {
+    analysis += `${index + 1}. **${bounty.title}**\n`;
+    analysis += `   💰 Estimated Value: ${bounty.estimated_value}\n`;
+    analysis += `   📊 Difficulty: ${bounty.difficulty_level}\n`;
+    analysis += `   🎯 Skill Match: ${bounty.skill_match}% relevance\n`;
+    analysis += `   📍 Repository: ${bounty.repository_url?.split('/').slice(-2).join('/') || 'Unknown'}\n`;
+    analysis += `   💬 Engagement: ${bounty.comments} comments | 👍 ${bounty.reactions?.total_count || 0} reactions\n`;
+    analysis += `   🔗 [Apply Now](${bounty.html_url})\n`;
+    
+    // Add difficulty-specific advice
+    if (bounty.difficulty_level === 'Easy') {
+      analysis += `   💡 Good for beginners - start here!\n`;
+    } else if (bounty.difficulty_level === 'Hard') {
+      analysis += `   🧠 Requires expertise - high reward potential\n`;
+    }
+    
+    analysis += '\n';
+  });
+
+  // AI Analysis and Strategy
+  analysis += `🤖 **AI Strategy Analysis**\n\n`;
+
+  // Skill match analysis
+  const avgSkillMatch = bountyIssues.reduce((sum, b) => sum + b.skill_match, 0) / bountyIssues.length;
+  
+  if (avgSkillMatch > 50) {
+    analysis += `🎯 **Excellent Skill Alignment**: Your skills match ${avgSkillMatch.toFixed(0)}% of available bounties on average.\n\n`;
+  } else if (avgSkillMatch > 25) {
+    analysis += `🎯 **Good Skill Match**: Your skills align with ${avgSkillMatch.toFixed(0)}% of bounties. Consider expanding skill set for more opportunities.\n\n`;
+  } else {
+    analysis += `🎯 **Skill Gap Identified**: Only ${avgSkillMatch.toFixed(0)}% average match. Focus on learning in-demand skills.\n\n`;
+  }
+
+  // Value analysis
+  const highValueBounties = bountyIssues.filter(b => extractNumericValue(b.estimated_value) >= 200);
+  if (highValueBounties.length > 0) {
+    analysis += `💎 **High-Value Opportunities**: ${highValueBounties.length} bounties worth $200+ detected.\n\n`;
+  }
+
+  // Competition analysis
+  const highEngagementBounties = bountyIssues.filter(b => (b.comments || 0) > 10);
+  if (highEngagementBounties.length > 0) {
+    analysis += `🔥 **High Competition**: ${highEngagementBounties.length} bounties have 10+ comments - act fast!\n\n`;
+  }
+
+  // Personalized recommendations
+  analysis += `💡 **Personalized Recommendations**\n\n`;
+
+  if (difficultyDistribution.easy > 0 && avgSkillMatch < 40) {
+    analysis += `🎯 **Start with Easy Bounties**: Build reputation with ${difficultyDistribution.easy} easy tasks first.\n\n`;
+  }
+
+  if (language) {
+    const langBounties = bountyIssues.filter(b => 
+      b.title?.toLowerCase().includes(language.toLowerCase()) ||
+      b.body?.toLowerCase().includes(language.toLowerCase())
+    );
+    if (langBounties.length > 0) {
+      analysis += `🔧 **${language} Focus**: ${langBounties.length} bounties specifically mention ${language}.\n\n`;
+    }
+  }
+
+  if (skills && skills.length > 0) {
+    const skillMatches = new Map<string, number>();
+    skills.forEach(skill => {
+      const count = bountyIssues.filter(b => 
+        b.title?.toLowerCase().includes(skill.toLowerCase()) ||
+        b.body?.toLowerCase().includes(skill.toLowerCase())
+      ).length;
+      if (count > 0) {
+        skillMatches.set(skill, count);
+      }
+    });
+
+    if (skillMatches.size > 0) {
+      analysis += `🎪 **Skill Demand Analysis**:\n`;
+      Array.from(skillMatches.entries())
+        .sort((a, b) => b[1] - a[1])
+        .forEach(([skill, count]) => {
+          analysis += `   - ${skill}: ${count} bounties\n`;
+        });
+      analysis += '\n';
+    }
+  }
+
+  // Action plan
+  analysis += `🚀 **Action Plan**\n`;
+  
+  if (difficultyDistribution.easy > 0) {
+    analysis += `1. Start with easy bounties to build reputation and confidence\n`;
+  }
+  
+  analysis += `2. Focus on bounties with ${Math.round(avgSkillMatch)}%+ skill match first\n`;
+  
+  if (highValueBounties.length > 0) {
+    analysis += `3. Target high-value opportunities (${highValueBounties.length} available)\n`;
+  }
+  
+  analysis += `4. Read issue descriptions carefully and ask clarifying questions\n`;
+  analysis += `5. Start working on solutions quickly - bounties are competitive\n`;
+  
+  if (avgSkillMatch < 50) {
+    analysis += `6. Invest time in learning trending technologies to increase opportunities\n`;
+  }
+
+  // Earnings projection
+  const potentialEarnings = calculatePotentialEarnings(bountyIssues, avgSkillMatch);
+  analysis += `\n💰 **Potential Monthly Earnings**: $${potentialEarnings.monthly.toLocaleString()}\n`;
+  analysis += `📈 **Success Rate Estimate**: ${potentialEarnings.successRate}% (based on skill match)\n`;
+
+  return analysis;
+}
+
+function calculatePotentialEarnings(bounties: any[], skillMatch: number): { monthly: number; successRate: number } {
+  // Calculate success rate based on skill match
+  const baseSuccessRate = Math.min(Math.max(skillMatch / 2, 10), 80); // 10-80% range
+  
+  // Calculate average bounty value
+  const avgBountyValue = bounties.reduce((sum, b) => sum + extractNumericValue(b.estimated_value), 0) / bounties.length;
+  
+  // Estimate bounties completed per month based on difficulty
+  const easyCount = bounties.filter(b => b.difficulty_level === 'Easy').length;
+  const mediumCount = bounties.filter(b => b.difficulty_level === 'Medium').length;
+  const hardCount = bounties.filter(b => b.difficulty_level === 'Hard').length;
+  
+  // Assume: 8 easy, 4 medium, or 2 hard bounties per month for full-time
+  const monthlyCapacity = (easyCount * 0.3) + (mediumCount * 0.15) + (hardCount * 0.05);
+  const actualCompletions = Math.min(monthlyCapacity, 8); // Cap at reasonable number
+  
+  const monthlyEarnings = actualCompletions * avgBountyValue * (baseSuccessRate / 100);
+  
+  return {
+    monthly: Math.round(monthlyEarnings),
+    successRate: Math.round(baseSuccessRate)
+  };
 }
 
 function calculateEstimatedEarnings(bountyIssues: any[]): any {
@@ -1031,12 +1880,176 @@ async function analyzeVulnerabilityFixesWithAI(vulnFixes: any[], vulnerabilityTy
 
 // Additional stub functions for core analysis features
 async function getOpenIssues(owner: string, repo: string, limit: number = 20): Promise<any[]> {
-  console.log(`Getting open issues for ${owner}/${repo} - feature in development`);
-  return [];
+  const url = `https://api.github.com/repos/${owner}/${repo}/issues?state=open&per_page=${limit}`;
+  
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'Nosana-GitHub-Insights-Agent',
+  };
+  
+  if (process.env.GITHUB_TOKEN) {
+    headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+  }
+
+  try {
+    const response = await fetch(url, { headers });
+    
+    if (!response.ok) {
+      if (response.status === 403) {
+        console.warn(`Rate limited when fetching issues for ${owner}/${repo}`);
+        return [];
+      }
+      throw new Error(`GitHub API error: ${response.status}`);
+    }
+    
+    const issues = await response.json() as any[];
+    // Filter out pull requests (GitHub API includes PRs in issues endpoint)
+    return issues.filter(issue => !issue.pull_request);
+  } catch (error) {
+    console.error(`Error fetching issues for ${owner}/${repo}:`, error);
+    return [];
+  }
 }
 
 async function analyzeIssuesWithAI(issues: any[], owner: string, repo: string): Promise<string> {
-  return `📝 **Issues Analysis for ${owner}/${repo}**\n\n🚧 Enhanced issue analysis is being developed!\n\n💡 **Coming Features:**\n- AI-powered issue categorization\n- Priority recommendations\n- Solution suggestions\n- Community insights\n\nTry our Security Analysis or Repository Overview features!`;
+  if (issues.length === 0) {
+    return `📝 **Issues Analysis for ${owner}/${repo}**\n\n✅ **Great News!** No open issues found or limited API access.\n\n💡 **This could mean:**\n- Very well-maintained repository\n- Issues are resolved quickly\n- Private repository or API rate limits\n\n🎯 **Recommendations:**\n- Check if this repo is actively maintained\n- Look at closed issues for historical context\n- Consider contributing if you find areas for improvement`;
+  }
+
+  // Categorize issues
+  const bugIssues = issues.filter(issue => 
+    issue.labels?.some((label: any) => 
+      ['bug', 'error', 'fix', 'broken'].some(keyword => 
+        label.name.toLowerCase().includes(keyword)
+      )
+    ) || 
+    ['bug', 'error', 'fix', 'broken', 'crash'].some(keyword => 
+      issue.title.toLowerCase().includes(keyword)
+    )
+  );
+
+  const featureRequests = issues.filter(issue => 
+    issue.labels?.some((label: any) => 
+      ['enhancement', 'feature', 'improvement'].some(keyword => 
+        label.name.toLowerCase().includes(keyword)
+      )
+    ) ||
+    ['feature', 'add', 'implement', 'support'].some(keyword => 
+      issue.title.toLowerCase().includes(keyword)
+    )
+  );
+
+  const helpWanted = issues.filter(issue => 
+    issue.labels?.some((label: any) => 
+      ['help wanted', 'good first issue', 'beginner'].some(keyword => 
+        label.name.toLowerCase().includes(keyword)
+      )
+    )
+  );
+
+  const highPriority = issues.filter(issue => 
+    issue.labels?.some((label: any) => 
+      ['critical', 'urgent', 'high priority', 'blocker'].some(keyword => 
+        label.name.toLowerCase().includes(keyword)
+      )
+    )
+  );
+
+  // Calculate metrics
+  const avgCommentsPerIssue = issues.reduce((sum, issue) => sum + issue.comments, 0) / issues.length;
+  const recentIssues = issues.filter(issue => {
+    const createdDate = new Date(issue.created_at);
+    const daysSinceCreated = (Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
+    return daysSinceCreated <= 30;
+  });
+
+  let analysis = `📝 **Issues Analysis for ${owner}/${repo}**\n\n`;
+  
+  // Overview
+  analysis += `📊 **Overview**\n`;
+  analysis += `- Total Open Issues: ${issues.length}\n`;
+  analysis += `- Recent Issues (30 days): ${recentIssues.length}\n`;
+  analysis += `- Average Comments per Issue: ${avgCommentsPerIssue.toFixed(1)}\n\n`;
+
+  // Issue Categories
+  analysis += `🏷️ **Issue Categories**\n`;
+  analysis += `- 🐛 Bug Reports: ${bugIssues.length}\n`;
+  analysis += `- ✨ Feature Requests: ${featureRequests.length}\n`;
+  analysis += `- 🙋 Help Wanted: ${helpWanted.length}\n`;
+  analysis += `- 🚨 High Priority: ${highPriority.length}\n\n`;
+
+  // Top Issues
+  analysis += `🔥 **Top Issues by Engagement**\n`;
+  const topIssues = issues
+    .sort((a, b) => (b.comments + b.reactions?.total_count || 0) - (a.comments + a.reactions?.total_count || 0))
+    .slice(0, 5);
+
+  topIssues.forEach((issue, index) => {
+    const engagement = issue.comments + (issue.reactions?.total_count || 0);
+    analysis += `${index + 1}. [${issue.title}](${issue.html_url})\n`;
+    analysis += `   💬 ${issue.comments} comments | 👍 ${engagement} engagement\n`;
+  });
+  analysis += '\n';
+
+  // Insights & Recommendations
+  analysis += `💡 **AI Insights & Recommendations**\n\n`;
+
+  if (highPriority.length > 0) {
+    analysis += `🚨 **Critical Attention Needed**: ${highPriority.length} high-priority issues require immediate attention.\n\n`;
+  }
+
+  if (helpWanted.length > 0) {
+    analysis += `🎯 **Contribution Opportunities**: ${helpWanted.length} issues are marked as "help wanted" - perfect for new contributors!\n\n`;
+  }
+
+  if (bugIssues.length > featureRequests.length * 2) {
+    analysis += `🐛 **High Bug Ratio**: Consider focusing on bug fixes before adding new features.\n\n`;
+  }
+
+  if (recentIssues.length > issues.length * 0.5) {
+    analysis += `📈 **High Recent Activity**: Many recent issues suggest active development or emerging problems.\n\n`;
+  }
+
+  if (avgCommentsPerIssue > 10) {
+    analysis += `💬 **High Engagement**: Issues generate lots of discussion - indicates active community involvement.\n\n`;
+  }
+
+  // Action Items
+  analysis += `🎯 **Recommended Actions**\n`;
+  
+  if (helpWanted.length > 0) {
+    analysis += `- Consider contributing to ${helpWanted.length} "help wanted" issues\n`;
+  }
+  
+  if (bugIssues.length > 0) {
+    analysis += `- Review ${bugIssues.length} bug reports for potential quick fixes\n`;
+  }
+  
+  if (highPriority.length > 0) {
+    analysis += `- Prioritize ${highPriority.length} critical issues if you're a maintainer\n`;
+  }
+  
+  analysis += `- Engage with the community through issue discussions\n`;
+  analysis += `- Consider starring/watching the repo to stay updated\n\n`;
+
+  // Repository Health Indicator
+  const healthScore = Math.max(0, Math.min(100, 
+    100 - (bugIssues.length * 2) - (highPriority.length * 5) + (helpWanted.length * 2)
+  ));
+  
+  analysis += `📊 **Repository Health Score: ${healthScore}/100**\n`;
+  
+  if (healthScore >= 80) {
+    analysis += `🟢 Excellent - Well-maintained with manageable issue load\n`;
+  } else if (healthScore >= 60) {
+    analysis += `🟡 Good - Some attention needed but generally healthy\n`;
+  } else if (healthScore >= 40) {
+    analysis += `🟠 Needs Work - Multiple issues requiring attention\n`;
+  } else {
+    analysis += `🔴 Critical - Significant issues need immediate attention\n`;
+  }
+
+  return analysis;
 }
 
 async function getRecentPullRequests(owner: string, repo: string, limit: number = 20): Promise<any[]> {
