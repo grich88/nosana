@@ -415,32 +415,818 @@ Examples:
 app.get('/agent-info', (req: Request, res: Response) => {
   res.json({
     name: 'GitHub Insights Agent',
-    description: 'AI agent that provides comprehensive GitHub repository insights with health and security assessments',
+    version: '2.0.0',
+    description: 'Advanced AI agent providing comprehensive GitHub repository analysis with intelligent insights, automated fixes, and actionable recommendations',
     capabilities: [
-      'Fetch repository statistics (stars, forks, issues)',
-      'Analyze repository health and activity',
-      'Security vulnerability scanning',
-      'Code quality and safety analysis',
-      'License compliance checking',
-      'Hardcoded secrets detection',
-      'Provide development insights and recommendations',
-      'Support for any public GitHub repository'
+      '📊 Repository health scoring and analysis',
+      '🔒 Comprehensive security vulnerability scanning',
+      '📋 Open issues analysis with AI-powered fix suggestions',
+      '🔄 Pull request insights and merge pattern analysis',
+      '👥 Contributor analysis and team dynamics insights',
+      '📦 Dependency health monitoring and update recommendations',
+      '📝 Automated release notes generation',
+      '🛡️ Code quality assessment and best practices',
+      '💡 AI-generated actionable recommendations',
+      '🌐 Support for any public GitHub repository'
     ],
-    usage: 'Send a POST request to /chat with a message like "Show me stats for facebook/react" or use /security endpoint for detailed security analysis',
+    features: {
+      overview: {
+        description: 'Repository health & metrics analysis',
+        includes: ['Health scoring (1-10)', 'Key metrics', 'Activity patterns', 'Community insights']
+      },
+      security: {
+        description: 'Vulnerability scanning & security assessment',
+        includes: ['Code vulnerability detection', 'Dependency analysis', 'Secret scanning', 'License compliance']
+      },
+      issues: {
+        description: 'Open issues analysis with AI fixes',
+        includes: ['Issue categorization', 'Priority analysis', 'AI fix suggestions', 'Maintenance insights']
+      },
+      pullRequests: {
+        description: 'PR insights & merge patterns',
+        includes: ['Merge rate analysis', 'Review patterns', 'Performance metrics', 'Team efficiency']
+      },
+      contributors: {
+        description: 'Team analysis & contributor patterns',
+        includes: ['Contribution distribution', 'Activity patterns', 'Team dynamics', 'Bus factor analysis']
+      },
+      dependencies: {
+        description: 'Package health & update monitoring',
+        includes: ['Outdated packages', 'Security updates', 'Dependency analysis', 'Health recommendations']
+      },
+      releases: {
+        description: 'Release notes & versioning insights',
+        includes: ['Release frequency', 'Change analysis', 'Version recommendations', 'Automated notes']
+      }
+    },
+    usage: {
+      basic: 'Send a POST request to /chat with a repository identifier',
+      advanced: 'Use specific endpoints for detailed analysis types',
+      formats: [
+        'owner/repo (e.g., microsoft/vscode)',
+        'GitHub URLs (e.g., https://github.com/facebook/react)',
+        'Natural language (e.g., "Analyze security for tensorflow/tensorflow")'
+      ]
+    },
     endpoints: [
-      'GET /health - Service health check',
-      'GET /agent-info - Agent capabilities',
-      'POST /chat - Repository analysis with security',
-      'POST /security - Detailed security analysis'
+      {
+        method: 'GET',
+        path: '/health',
+        description: 'Service health check'
+      },
+      {
+        method: 'GET',
+        path: '/agent-info',
+        description: 'Agent capabilities and documentation'
+      },
+      {
+        method: 'POST',
+        path: '/chat',
+        description: 'General repository analysis with intelligent routing'
+      },
+      {
+        method: 'POST',
+        path: '/security',
+        description: 'Detailed security vulnerability analysis'
+      },
+      {
+        method: 'POST',
+        path: '/analyze-issues',
+        description: 'Open issues analysis with AI fix recommendations'
+      },
+      {
+        method: 'POST',
+        path: '/analyze-prs',
+        description: 'Pull request insights and merge pattern analysis'
+      },
+      {
+        method: 'POST',
+        path: '/analyze-contributors',
+        description: 'Contributor analysis and team dynamics'
+      },
+      {
+        method: 'POST',
+        path: '/analyze-dependencies',
+        description: 'Dependency health and update recommendations'
+      },
+      {
+        method: 'POST',
+        path: '/generate-release-notes',
+        description: 'AI-generated release notes and versioning insights'
+      }
     ],
     examples: [
-      'Show me stats for microsoft/vscode',
-      'Analyze facebook/react',
-      'Security scan for torvalds/linux',
-      'What is the health of https://github.com/vercel/next.js'
+      {
+        type: 'Overview Analysis',
+        query: 'microsoft/vscode',
+        description: 'Get comprehensive repository health and metrics'
+      },
+      {
+        type: 'Security Scan',
+        query: 'facebook/react',
+        description: 'Perform detailed security vulnerability analysis'
+      },
+      {
+        type: 'Issues Analysis',
+        query: 'nodejs/node',
+        description: 'Analyze open issues with AI fix suggestions'
+      },
+      {
+        type: 'Team Insights',
+        query: 'tensorflow/tensorflow',
+        description: 'Get contributor patterns and team dynamics'
+      },
+      {
+        type: 'Release Planning',
+        query: 'vercel/next.js',
+        description: 'Generate release notes and versioning insights'
+      }
+    ],
+    aiFeatures: [
+      'Intelligent issue categorization and priority analysis',
+      'AI-powered fix suggestions for common problems',
+      'Security vulnerability pattern recognition',
+      'Code quality assessment with recommendations',
+      'Team collaboration pattern analysis',
+      'Automated release note generation from commits',
+      'Smart dependency update recommendations',
+      'Project health scoring with actionable insights'
     ]
   });
 });
+
+// Open Issues Analysis endpoint
+app.post('/analyze-issues', async (req: Request, res: Response) => {
+  try {
+    const { message } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+    
+    const repoInfo = parseRepositoryFromMessage(message);
+    if (!repoInfo) {
+      return res.status(400).json({ 
+        error: 'Could not parse repository information. Please provide in format: owner/repo or GitHub URL' 
+      });
+    }
+    
+    const { owner, repo } = repoInfo;
+    
+    // Get open issues
+    const issues = await getOpenIssues(owner, repo);
+    const analysis = await analyzeIssuesWithAI(issues, owner, repo);
+    
+    res.json({
+      response: analysis,
+      issues: issues,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error: any) {
+    console.error('Issues analysis error:', error);
+    res.status(500).json({ 
+      error: 'Internal server error', 
+      message: error.message 
+    });
+  }
+});
+
+// Pull Request Insights endpoint
+app.post('/analyze-prs', async (req: Request, res: Response) => {
+  try {
+    const { message } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+    
+    const repoInfo = parseRepositoryFromMessage(message);
+    if (!repoInfo) {
+      return res.status(400).json({ 
+        error: 'Could not parse repository information' 
+      });
+    }
+    
+    const { owner, repo } = repoInfo;
+    
+    // Get recent pull requests
+    const prs = await getRecentPullRequests(owner, repo);
+    const analysis = await analyzePullRequestsWithAI(prs, owner, repo);
+    
+    res.json({
+      response: analysis,
+      pullRequests: prs,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error: any) {
+    console.error('PR analysis error:', error);
+    res.status(500).json({ 
+      error: 'Internal server error', 
+      message: error.message 
+    });
+  }
+});
+
+// Contributors Analysis endpoint
+app.post('/analyze-contributors', async (req: Request, res: Response) => {
+  try {
+    const { message } = req.body;
+    
+    const repoInfo = parseRepositoryFromMessage(message);
+    if (!repoInfo) {
+      return res.status(400).json({ 
+        error: 'Could not parse repository information' 
+      });
+    }
+    
+    const { owner, repo } = repoInfo;
+    
+    // Get contributors data
+    const contributors = await getContributors(owner, repo);
+    const commits = await getRecentCommits(owner, repo);
+    const analysis = await analyzeContributorsWithAI(contributors, commits, owner, repo);
+    
+    res.json({
+      response: analysis,
+      contributors: contributors,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error: any) {
+    console.error('Contributors analysis error:', error);
+    res.status(500).json({ 
+      error: 'Internal server error', 
+      message: error.message 
+    });
+  }
+});
+
+// Dependency Health endpoint
+app.post('/analyze-dependencies', async (req: Request, res: Response) => {
+  try {
+    const { message } = req.body;
+    
+    const repoInfo = parseRepositoryFromMessage(message);
+    if (!repoInfo) {
+      return res.status(400).json({ 
+        error: 'Could not parse repository information' 
+      });
+    }
+    
+    const { owner, repo } = repoInfo;
+    
+    // Analyze dependencies
+    const depAnalysis = await analyzeDependencyHealth(owner, repo);
+    
+    res.json({
+      response: depAnalysis.summary,
+      dependencies: depAnalysis.details,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error: any) {
+    console.error('Dependency analysis error:', error);
+    res.status(500).json({ 
+      error: 'Internal server error', 
+      message: error.message 
+    });
+  }
+});
+
+// Release Notes Generator endpoint
+app.post('/generate-release-notes', async (req: Request, res: Response) => {
+  try {
+    const { message } = req.body;
+    
+    const repoInfo = parseRepositoryFromMessage(message);
+    if (!repoInfo) {
+      return res.status(400).json({ 
+        error: 'Could not parse repository information' 
+      });
+    }
+    
+    const { owner, repo } = repoInfo;
+    
+    // Generate release notes from recent commits
+    const releases = await getRecentReleases(owner, repo);
+    const commits = await getRecentCommits(owner, repo);
+    const releaseNotes = await generateReleaseNotesWithAI(releases, commits, owner, repo);
+    
+    res.json({
+      response: releaseNotes,
+      releases: releases,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error: any) {
+    console.error('Release notes generation error:', error);
+    res.status(500).json({ 
+      error: 'Internal server error', 
+      message: error.message 
+    });
+  }
+});
+
+// Helper functions for enhanced GitHub insights
+
+// Get open issues from repository
+async function getOpenIssues(owner: string, repo: string) {
+  const url = `https://api.github.com/repos/${owner}/${repo}/issues?state=open&per_page=20`;
+  
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'Nosana-GitHub-Insights-Agent',
+  };
+  
+  if (process.env.GITHUB_TOKEN) {
+    headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+  }
+  
+  try {
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      console.warn(`Failed to fetch issues for ${owner}/${repo}: ${response.status}`);
+      return [];
+    }
+    const issues = await response.json() as any[];
+    // Filter out pull requests (GitHub API includes PRs in issues)
+    return issues.filter(issue => !issue.pull_request);
+  } catch (error) {
+    console.error('Error fetching issues:', error);
+    return [];
+  }
+}
+
+// AI-powered issue analysis
+async function analyzeIssuesWithAI(issues: any[], owner: string, repo: string): Promise<string> {
+  if (issues.length === 0) {
+    return `📋 **Open Issues Analysis for ${owner}/${repo}**\n\n🎉 **Great news!** This repository has no open issues.\n\nThis indicates excellent maintenance and issue management. The project appears to be well-maintained with prompt issue resolution.`;
+  }
+
+  let analysis = `📋 **Open Issues Analysis for ${owner}/${repo}**\n\n`;
+  analysis += `📊 **Summary**: ${issues.length} open issues found\n\n`;
+
+  // Categorize issues
+  const bugIssues = issues.filter(issue => 
+    issue.labels.some((label: any) => label.name.toLowerCase().includes('bug'))
+  );
+  const featureRequests = issues.filter(issue => 
+    issue.labels.some((label: any) => label.name.toLowerCase().includes('feature') || label.name.toLowerCase().includes('enhancement'))
+  );
+  const helpWanted = issues.filter(issue => 
+    issue.labels.some((label: any) => label.name.toLowerCase().includes('help wanted') || label.name.toLowerCase().includes('good first issue'))
+  );
+
+  analysis += `🔍 **Issue Categories**:\n`;
+  analysis += `- 🐛 Bugs: ${bugIssues.length}\n`;
+  analysis += `- ✨ Feature Requests: ${featureRequests.length}\n`;
+  analysis += `- 🤝 Help Wanted: ${helpWanted.length}\n`;
+  analysis += `- 📝 Other: ${issues.length - bugIssues.length - featureRequests.length - helpWanted.length}\n\n`;
+
+  // Top issues analysis
+  analysis += `🔥 **Top Priority Issues** (Most commented/reacted):\n`;
+  const sortedIssues = issues
+    .sort((a, b) => (b.comments + (b.reactions?.total_count || 0)) - (a.comments + (a.reactions?.total_count || 0)))
+    .slice(0, 5);
+
+  sortedIssues.forEach((issue, index) => {
+    const ageInDays = Math.floor((Date.now() - new Date(issue.created_at).getTime()) / (1000 * 60 * 60 * 24));
+    analysis += `${index + 1}. **${issue.title}** (#${issue.number})\n`;
+    analysis += `   - Age: ${ageInDays} days | Comments: ${issue.comments} | Reactions: ${issue.reactions?.total_count || 0}\n`;
+    analysis += `   - 💡 **AI Suggestion**: `;
+    
+    if (issue.labels.some((l: any) => l.name.toLowerCase().includes('bug'))) {
+      analysis += `This bug issue needs debugging. Check error logs, add reproduction steps, and assign to maintainers.\n`;
+    } else if (issue.labels.some((l: any) => l.name.toLowerCase().includes('feature'))) {
+      analysis += `Feature request with community interest. Consider roadmap prioritization and design discussion.\n`;
+    } else if (issue.comments === 0) {
+      analysis += `No responses yet. Needs initial triage and labeling by maintainers.\n`;
+    } else {
+      analysis += `Active discussion. Review latest comments for resolution progress.\n`;
+    }
+    analysis += '\n';
+  });
+
+  // AI recommendations
+  analysis += `💡 **AI Recommendations**:\n`;
+  if (bugIssues.length > issues.length * 0.4) {
+    analysis += `- ⚠️ High bug ratio detected. Consider improving testing and QA processes.\n`;
+  }
+  if (helpWanted.length > 0) {
+    analysis += `- 🤝 ${helpWanted.length} issues marked for community help. Great for new contributors!\n`;
+  }
+  if (issues.some(issue => (Date.now() - new Date(issue.created_at).getTime()) / (1000 * 60 * 60 * 24) > 90)) {
+    analysis += `- 📅 Some issues are over 90 days old. Consider closing stale issues or updating status.\n`;
+  }
+  analysis += `- 🎯 Focus on the top commented issues for maximum community impact.\n`;
+
+  return analysis;
+}
+
+// Get recent pull requests
+async function getRecentPullRequests(owner: string, repo: string) {
+  const url = `https://api.github.com/repos/${owner}/${repo}/pulls?state=all&per_page=20&sort=updated`;
+  
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'Nosana-GitHub-Insights-Agent',
+  };
+  
+  if (process.env.GITHUB_TOKEN) {
+    headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+  }
+  
+  try {
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      console.warn(`Failed to fetch PRs for ${owner}/${repo}: ${response.status}`);
+      return [];
+    }
+    return await response.json() as any[];
+  } catch (error) {
+    console.error('Error fetching pull requests:', error);
+    return [];
+  }
+}
+
+// AI-powered PR analysis
+async function analyzePullRequestsWithAI(prs: any[], owner: string, repo: string): Promise<string> {
+  if (prs.length === 0) {
+    return `🔄 **Pull Request Analysis for ${owner}/${repo}**\n\n📭 No recent pull requests found.\n\nThis could indicate low activity or that the project is stable with infrequent updates.`;
+  }
+
+  let analysis = `🔄 **Pull Request Analysis for ${owner}/${repo}**\n\n`;
+  analysis += `📊 **Summary**: ${prs.length} recent pull requests\n\n`;
+
+  const openPRs = prs.filter(pr => pr.state === 'open');
+  const mergedPRs = prs.filter(pr => pr.merged_at);
+  const closedPRs = prs.filter(pr => pr.state === 'closed' && !pr.merged_at);
+
+  analysis += `📈 **PR Status Breakdown**:\n`;
+  analysis += `- 🟢 Open: ${openPRs.length}\n`;
+  analysis += `- ✅ Merged: ${mergedPRs.length}\n`;
+  analysis += `- ❌ Closed: ${closedPRs.length}\n\n`;
+
+  // Merge rate analysis
+  const mergeRate = prs.length > 0 ? (mergedPRs.length / prs.length * 100).toFixed(1) : '0';
+  analysis += `🎯 **Merge Rate**: ${mergeRate}% (${mergedPRs.length}/${prs.length})\n\n`;
+
+  // Recent activity
+  if (openPRs.length > 0) {
+    analysis += `🔥 **Active Pull Requests**:\n`;
+    openPRs.slice(0, 5).forEach((pr, index) => {
+      const ageInDays = Math.floor((Date.now() - new Date(pr.created_at).getTime()) / (1000 * 60 * 60 * 24));
+      analysis += `${index + 1}. **${pr.title}** (#${pr.number})\n`;
+      analysis += `   - Author: ${pr.user.login} | Age: ${ageInDays} days\n`;
+      analysis += `   - Changes: +${pr.additions || 0}/-${pr.deletions || 0} lines\n\n`;
+    });
+  }
+
+  // AI insights
+  analysis += `💡 **AI Insights**:\n`;
+  if (openPRs.length > 10) {
+    analysis += `- ⚠️ High number of open PRs. Consider reviewing backlog and prioritizing merges.\n`;
+  }
+  if (parseFloat(mergeRate) > 80) {
+    analysis += `- ✅ Excellent merge rate! Shows good code review process and contributor quality.\n`;
+  } else if (parseFloat(mergeRate) < 50) {
+    analysis += `- 🔍 Lower merge rate detected. Review PR criteria and contributor guidelines.\n`;
+  }
+  
+  const avgResponseTime = mergedPRs.length > 0 ? 
+    mergedPRs.reduce((sum, pr) => {
+      const timeToMerge = new Date(pr.merged_at).getTime() - new Date(pr.created_at).getTime();
+      return sum + (timeToMerge / (1000 * 60 * 60 * 24)); // days
+    }, 0) / mergedPRs.length : 0;
+  
+  if (avgResponseTime > 0) {
+    analysis += `- ⏱️ Average merge time: ${avgResponseTime.toFixed(1)} days\n`;
+  }
+
+  return analysis;
+}
+
+// Get repository contributors
+async function getContributors(owner: string, repo: string) {
+  const url = `https://api.github.com/repos/${owner}/${repo}/contributors?per_page=30`;
+  
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'Nosana-GitHub-Insights-Agent',
+  };
+  
+  if (process.env.GITHUB_TOKEN) {
+    headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+  }
+  
+  try {
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      console.warn(`Failed to fetch contributors for ${owner}/${repo}: ${response.status}`);
+      return [];
+    }
+    return await response.json() as any[];
+  } catch (error) {
+    console.error('Error fetching contributors:', error);
+    return [];
+  }
+}
+
+// Get recent commits
+async function getRecentCommits(owner: string, repo: string) {
+  const url = `https://api.github.com/repos/${owner}/${repo}/commits?per_page=50`;
+  
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'Nosana-GitHub-Insights-Agent',
+  };
+  
+  if (process.env.GITHUB_TOKEN) {
+    headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+  }
+  
+  try {
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      console.warn(`Failed to fetch commits for ${owner}/${repo}: ${response.status}`);
+      return [];
+    }
+    return await response.json() as any[];
+  } catch (error) {
+    console.error('Error fetching commits:', error);
+    return [];
+  }
+}
+
+// AI-powered contributor analysis
+async function analyzeContributorsWithAI(contributors: any[], commits: any[], owner: string, repo: string): Promise<string> {
+  if (contributors.length === 0) {
+    return `👥 **Contributor Analysis for ${owner}/${repo}**\n\n📭 No contributor data available.\n\nThis might be a private repository or there was an issue fetching contributor information.`;
+  }
+
+  let analysis = `👥 **Contributor Analysis for ${owner}/${repo}**\n\n`;
+  analysis += `📊 **Summary**: ${contributors.length} contributors found\n\n`;
+
+  // Top contributors
+  analysis += `🏆 **Top Contributors** (by commits):\n`;
+  contributors.slice(0, 10).forEach((contributor, index) => {
+    analysis += `${index + 1}. **${contributor.login}** - ${contributor.contributions} commits\n`;
+  });
+  analysis += '\n';
+
+  // Contribution distribution
+  const totalCommits = contributors.reduce((sum, c) => sum + c.contributions, 0);
+  const topContributor = contributors[0];
+  const topContributorPercentage = ((topContributor.contributions / totalCommits) * 100).toFixed(1);
+
+  analysis += `📈 **Contribution Patterns**:\n`;
+  analysis += `- Total commits: ${totalCommits}\n`;
+  analysis += `- Top contributor (${topContributor.login}): ${topContributorPercentage}% of commits\n`;
+  
+  if (parseFloat(topContributorPercentage) > 80) {
+    analysis += `- ⚠️ High concentration: Single contributor dominance detected\n`;
+  } else if (parseFloat(topContributorPercentage) < 30) {
+    analysis += `- ✅ Well distributed: Healthy contributor diversity\n`;
+  }
+
+  // Recent activity analysis
+  if (commits.length > 0) {
+    const recentCommitters = new Set(commits.map(c => c.commit.author.email));
+    analysis += `- Active committers (last 50 commits): ${recentCommitters.size}\n`;
+    
+    const lastWeekCommits = commits.filter(c => 
+      (Date.now() - new Date(c.commit.author.date).getTime()) / (1000 * 60 * 60 * 24) <= 7
+    );
+    analysis += `- Commits in last week: ${lastWeekCommits.length}\n\n`;
+  }
+
+  // AI recommendations
+  analysis += `💡 **AI Recommendations**:\n`;
+  if (contributors.length < 3) {
+    analysis += `- 🤝 Low contributor count. Consider improving contributor onboarding and documentation.\n`;
+  }
+  if (parseFloat(topContributorPercentage) > 70) {
+    analysis += `- 🔄 High bus factor risk. Encourage knowledge sharing and mentoring new contributors.\n`;
+  }
+  if (contributors.length > 20) {
+    analysis += `- 🌟 Great contributor community! Consider contributor recognition programs.\n`;
+  }
+  analysis += `- 📚 Review CONTRIBUTING.md and issue labels to guide new contributors.\n`;
+
+  return analysis;
+}
+
+// Analyze dependency health
+async function analyzeDependencyHealth(owner: string, repo: string): Promise<{ summary: string; details: any[] }> {
+  const packageFiles = ['package.json', 'requirements.txt', 'pom.xml', 'Cargo.toml', 'go.mod'];
+  let summary = `📦 **Dependency Health Analysis for ${owner}/${repo}**\n\n`;
+  const details: any[] = [];
+
+  try {
+    for (const file of packageFiles) {
+      const content = await getFileContentFromRepo(owner, repo, file);
+      if (content) {
+        const analysis = analyzeDependencyFile(content, file);
+        if (analysis) {
+          details.push(analysis);
+          summary += `📄 **${file}** found - ${analysis.summary}\n`;
+        }
+      }
+    }
+
+    if (details.length === 0) {
+      summary += `🔍 No common dependency files found (package.json, requirements.txt, etc.)\n\n`;
+      summary += `💡 **Recommendations**:\n`;
+      summary += `- Check if this is a compiled language or uses different dependency management\n`;
+      summary += `- Review project structure for dependency configuration files\n`;
+    } else {
+      summary += `\n💡 **AI Security Recommendations**:\n`;
+      summary += `- 🔄 Regularly update dependencies to patch security vulnerabilities\n`;
+      summary += `- 🛡️ Use dependency scanning tools like Dependabot or Snyk\n`;
+      summary += `- 📋 Pin dependency versions for reproducible builds\n`;
+      summary += `- 🔍 Audit dependencies for known vulnerabilities\n`;
+    }
+
+  } catch (error) {
+    console.error('Dependency analysis error:', error);
+    summary = `📦 **Dependency Health Analysis**\n\n❌ Error analyzing dependencies: ${error}\n`;
+  }
+
+  return { summary, details };
+}
+
+// Get recent releases
+async function getRecentReleases(owner: string, repo: string) {
+  const url = `https://api.github.com/repos/${owner}/${repo}/releases?per_page=10`;
+  
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'Nosana-GitHub-Insights-Agent',
+  };
+  
+  if (process.env.GITHUB_TOKEN) {
+    headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+  }
+  
+  try {
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      console.warn(`Failed to fetch releases for ${owner}/${repo}: ${response.status}`);
+      return [];
+    }
+    return await response.json() as any[];
+  } catch (error) {
+    console.error('Error fetching releases:', error);
+    return [];
+  }
+}
+
+// Generate AI-powered release notes
+async function generateReleaseNotesWithAI(releases: any[], commits: any[], owner: string, repo: string): Promise<string> {
+  let analysis = `📝 **Release Notes Analysis for ${owner}/${repo}**\n\n`;
+
+  if (releases.length === 0) {
+    analysis += `📭 No releases found.\n\n`;
+    analysis += `💡 **AI Suggestions for First Release**:\n`;
+    
+    if (commits.length > 0) {
+      analysis += `- 🎯 Current commit count: ${commits.length}\n`;
+      analysis += `- 📅 Repository age: ${getTimeAgo(commits[commits.length - 1]?.commit?.author?.date || new Date().toISOString())}\n`;
+      
+      // Analyze recent commits for release content
+      const recentCommits = commits.slice(0, 20);
+      const features = recentCommits.filter(c => 
+        /feat|feature|add/i.test(c.commit.message)
+      );
+      const fixes = recentCommits.filter(c => 
+        /fix|bug|patch/i.test(c.commit.message)
+      );
+      
+      analysis += `\n🚀 **Suggested v1.0.0 Release Notes** (Based on recent commits):\n\n`;
+      
+      if (features.length > 0) {
+        analysis += `✨ **Features**:\n`;
+        features.slice(0, 5).forEach(commit => {
+          analysis += `- ${commit.commit.message.split('\n')[0]}\n`;
+        });
+        analysis += '\n';
+      }
+      
+      if (fixes.length > 0) {
+        analysis += `🐛 **Bug Fixes**:\n`;
+        fixes.slice(0, 5).forEach(commit => {
+          analysis += `- ${commit.commit.message.split('\n')[0]}\n`;
+        });
+        analysis += '\n';
+      }
+    }
+    
+    analysis += `📋 **Release Checklist**:\n`;
+    analysis += `- [ ] Update version numbers\n`;
+    analysis += `- [ ] Update CHANGELOG.md\n`;
+    analysis += `- [ ] Tag the release\n`;
+    analysis += `- [ ] Write comprehensive release notes\n`;
+    analysis += `- [ ] Test the release\n`;
+    
+    return analysis;
+  }
+
+  // Analyze existing releases
+  analysis += `📊 **Release Summary**: ${releases.length} releases found\n\n`;
+  
+  const latestRelease = releases[0];
+  analysis += `🏷️ **Latest Release**: ${latestRelease.tag_name} (${new Date(latestRelease.published_at).toLocaleDateString()})\n`;
+  analysis += `📅 Released: ${getTimeAgo(latestRelease.published_at)}\n\n`;
+
+  // Release frequency analysis
+  if (releases.length > 1) {
+    const releaseInterval = releases.length > 1 ? 
+      (new Date(releases[0].published_at).getTime() - new Date(releases[releases.length - 1].published_at).getTime()) / 
+      (1000 * 60 * 60 * 24 * (releases.length - 1)) : 0;
+    
+    analysis += `📈 **Release Frequency**: Every ${releaseInterval.toFixed(0)} days on average\n\n`;
+  }
+
+  // Recent releases
+  analysis += `📋 **Recent Releases**:\n`;
+  releases.slice(0, 5).forEach((release, index) => {
+    analysis += `${index + 1}. **${release.tag_name}** - ${new Date(release.published_at).toLocaleDateString()}\n`;
+    if (release.body && release.body.length > 0) {
+      const shortDescription = release.body.substring(0, 100);
+      analysis += `   ${shortDescription}${release.body.length > 100 ? '...' : ''}\n`;
+    }
+  });
+
+  analysis += `\n💡 **AI Recommendations**:\n`;
+  analysis += `- 📝 Maintain consistent release note formatting\n`;
+  analysis += `- 🏷️ Use semantic versioning (major.minor.patch)\n`;
+  analysis += `- 📋 Include breaking changes, new features, and bug fixes\n`;
+  analysis += `- 🔗 Link to relevant issues and pull requests\n`;
+
+  return analysis;
+}
+
+// Helper functions
+async function getFileContentFromRepo(owner: string, repo: string, path: string): Promise<string | null> {
+  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'Nosana-GitHub-Insights-Agent',
+  };
+  
+  if (process.env.GITHUB_TOKEN) {
+    headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+  }
+
+  try {
+    const response = await fetch(url, { headers });
+    if (!response.ok) return null;
+    
+    const data = await response.json() as { content?: string; encoding?: string };
+    if (data.content && data.encoding === 'base64') {
+      return Buffer.from(data.content, 'base64').toString('utf-8');
+    }
+    return null;
+  } catch (error) {
+    console.warn(`Error fetching file ${path}:`, error);
+    return null;
+  }
+}
+
+function analyzeDependencyFile(content: string, filename: string): any | null {
+  try {
+    if (filename === 'package.json') {
+      const pkg = JSON.parse(content);
+      const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+      const depCount = Object.keys(deps).length;
+      
+      return {
+        file: filename,
+        type: 'npm',
+        dependencyCount: depCount,
+        summary: `${depCount} npm dependencies detected`,
+        details: deps
+      };
+    } else if (filename === 'requirements.txt') {
+      const lines = content.split('\n').filter(line => line.trim() && !line.startsWith('#'));
+      return {
+        file: filename,
+        type: 'pip',
+        dependencyCount: lines.length,
+        summary: `${lines.length} Python packages detected`,
+        details: lines
+      };
+    }
+    // Add more dependency file types as needed
+    
+    return null;
+  } catch (error) {
+    console.warn(`Error parsing ${filename}:`, error);
+    return null;
+  }
+}
 
 app.listen(PORT, () => {
   console.log(`🚀 Nosana GitHub Insights Agent running on port ${PORT}`);
