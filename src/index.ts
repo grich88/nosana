@@ -1,12 +1,16 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { SecurityAnalyzer } from './security/SecurityAnalyzer.js';
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Initialize security analyzer
+const securityAnalyzer = new SecurityAnalyzer();
 
 // Middleware
 app.use(cors());
@@ -39,6 +43,45 @@ async function getGitHubRepoInfo(owner: string, repo: string) {
   
   return await response.json();
 }
+
+// Security analysis endpoint
+app.post('/security', async (req, res) => {
+  try {
+    const { message } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+    
+    const repoInfo = parseRepositoryFromMessage(message);
+    if (!repoInfo) {
+      return res.status(400).json({ 
+        error: 'Could not parse repository information. Please provide in format: owner/repo or GitHub URL' 
+      });
+    }
+    
+    const { owner, repo } = repoInfo;
+    
+    // Perform security analysis
+    const securityAnalysis = await securityAnalyzer.analyzeRepository(owner, repo);
+    
+    // Format the security response
+    const response = formatSecurityAnalysis(owner, repo, securityAnalysis);
+    
+    res.json({
+      response,
+      securityDetails: securityAnalysis,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error: any) {
+    console.error('Security analysis error:', error);
+    res.status(500).json({ 
+      error: 'Internal server error', 
+      message: error.message 
+    });
+  }
+});
 
 // Function to analyze repository health
 function analyzeRepositoryHealth(data: any): { status: string; score: number; factors: string[] } {
@@ -169,6 +212,79 @@ function parseRepositoryFromMessage(message: string): { owner: string; repo: str
   return null;
 }
 
+// Function to format security analysis
+function formatSecurityAnalysis(owner: string, repo: string, analysis: any): string {
+  let response = `🔒 **Security Analysis: ${repo} (${owner}/${repo})**\n\n`;
+  
+  // Security Score and Risk Level
+  response += `🛡️ **Security Score: ${analysis.overallScore}/100**\n`;
+  response += `⚠️ **Risk Level: ${analysis.riskLevel}**\n\n`;
+  
+  // Summary
+  response += `📋 **Summary**\n${analysis.summary}\n\n`;
+  
+  // Security Issues
+  if (analysis.codeQuality.length > 0) {
+    response += `🚨 **Code Security Issues (${analysis.codeQuality.length})**\n`;
+    analysis.codeQuality.slice(0, 5).forEach((issue: any) => {
+      response += `- ${issue.severity}: ${issue.description} in ${issue.file}\n`;
+      response += `  📝 ${issue.recommendation}\n`;
+    });
+    if (analysis.codeQuality.length > 5) {
+      response += `  ... and ${analysis.codeQuality.length - 5} more issues\n`;
+    }
+    response += '\n';
+  }
+  
+  // Secrets Detection
+  if (analysis.secrets.length > 0) {
+    response += `🔑 **Potential Secrets Found (${analysis.secrets.length})**\n`;
+    analysis.secrets.slice(0, 3).forEach((secret: any) => {
+      response += `- ${secret.type} detected in ${secret.file}\n`;
+    });
+    if (analysis.secrets.length > 3) {
+      response += `  ... and ${analysis.secrets.length - 3} more potential secrets\n`;
+    }
+    response += '\n';
+  }
+  
+  // License Risks
+  if (analysis.licenseRisks.length > 0) {
+    response += `⚖️ **License Compliance Risks**\n`;
+    analysis.licenseRisks.forEach((risk: any) => {
+      response += `- ${risk.license}: ${risk.riskLevel} risk\n`;
+      response += `  📄 ${risk.description}\n`;
+    });
+    response += '\n';
+  }
+  
+  // Recommendations
+  if (analysis.recommendations.length > 0) {
+    response += `💡 **Security Recommendations**\n`;
+    analysis.recommendations.forEach((rec: string) => {
+      response += `- ${rec}\n`;
+    });
+    response += '\n';
+  }
+  
+  // Security Badge
+  const badge = getSecurityBadge(analysis.riskLevel);
+  response += `${badge}\n`;
+  
+  return response;
+}
+
+// Function to get security badge
+function getSecurityBadge(riskLevel: string): string {
+  switch (riskLevel) {
+    case 'LOW': return '🟢 **SECURE** - Low security risk detected';
+    case 'MEDIUM': return '🟡 **CAUTION** - Medium security risk, review recommended';
+    case 'HIGH': return '🟠 **WARNING** - High security risk, action required';
+    case 'CRITICAL': return '🔴 **CRITICAL** - Severe security risks, immediate action required';
+    default: return '⚪ **UNKNOWN** - Security status unknown';
+  }
+}
+
 // Function to format repository analysis
 function formatRepositoryAnalysis(data: any): string {
   const health = analyzeRepositoryHealth(data);
@@ -265,11 +381,25 @@ Examples:
       });
     }
 
+    // Check if security analysis is requested
+    const isSecurityRequest = /security|secure|vulnerability|vulnerabilities|safety|safe|hack|threat|risk/i.test(message);
+    
     const data = await getGitHubRepoInfo(repoInfo.owner, repoInfo.repo);
-    const analysis = formatRepositoryAnalysis(data);
+    let analysis = formatRepositoryAnalysis(data);
+    let securityDetails = null;
+    
+    if (isSecurityRequest) {
+      // Perform security analysis
+      const securityAnalysis = await securityAnalyzer.analyzeRepository(repoInfo.owner, repoInfo.repo);
+      securityDetails = securityAnalysis;
+      
+      // Append security analysis to response
+      analysis += '\n\n' + formatSecurityAnalysis(repoInfo.owner, repoInfo.repo, securityAnalysis);
+    }
     
     res.json({ 
       response: analysis,
+      securityDetails,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -285,19 +415,29 @@ Examples:
 app.get('/agent-info', (req, res) => {
   res.json({
     name: 'GitHub Insights Agent',
-    description: 'AI agent that provides comprehensive GitHub repository insights with health assessments',
+    description: 'AI agent that provides comprehensive GitHub repository insights with health and security assessments',
     capabilities: [
       'Fetch repository statistics (stars, forks, issues)',
       'Analyze repository health and activity',
+      'Security vulnerability scanning',
+      'Code quality and safety analysis',
+      'License compliance checking',
+      'Hardcoded secrets detection',
       'Provide development insights and recommendations',
       'Support for any public GitHub repository'
     ],
-    usage: 'Send a POST request to /chat with a message like "Show me stats for facebook/react"',
+    usage: 'Send a POST request to /chat with a message like "Show me stats for facebook/react" or use /security endpoint for detailed security analysis',
+    endpoints: [
+      'GET /health - Service health check',
+      'GET /agent-info - Agent capabilities',
+      'POST /chat - Repository analysis with security',
+      'POST /security - Detailed security analysis'
+    ],
     examples: [
       'Show me stats for microsoft/vscode',
       'Analyze facebook/react',
-      'What is the health of torvalds/linux?',
-      'Tell me about https://github.com/vercel/next.js'
+      'Security scan for torvalds/linux',
+      'What is the health of https://github.com/vercel/next.js'
     ]
   });
 });
