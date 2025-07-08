@@ -1,0 +1,1 @@
+export { githubInsightsAgent } from './githubInsights'; 
