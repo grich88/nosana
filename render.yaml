@@ -1,0 +1,43 @@
+services:
+  # Backend API Service
+  - type: web
+    name: nosana-github-insights-backend
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: GITHUB_TOKEN
+        sync: false  # Will be set manually in Render dashboard
+    headers:
+      - path: /*
+        name: Access-Control-Allow-Origin
+        value: "*"
+      - path: /*
+        name: Access-Control-Allow-Methods
+        value: "GET, POST, OPTIONS"
+      - path: /*
+        name: Access-Control-Allow-Headers
+        value: "Content-Type, Authorization"
+
+  # Frontend Static Site
+  - type: static
+    name: nosana-github-insights-frontend
+    buildCommand: cd frontend && npm install && npm run build
+    publishPath: frontend/build
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      - path: /
+        name: Cache-Control
+        value: public, max-age=0, must-revalidate
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html 
