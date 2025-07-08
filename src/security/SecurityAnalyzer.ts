@@ -106,35 +106,55 @@ export class SecurityAnalyzer {
       
       // Analyze license risks
       if (repoInfo.license?.spdx_id) {
-        const licenseRisk = this.analyzeLicense(repoInfo.license.spdx_id);
-        if (licenseRisk) licenseRisks.push(licenseRisk);
-      }
-
-      // Get repository files for code analysis
-      const files = await this.getRepositoryFiles(owner, repo);
-      
-      // Analyze code files
-      for (const file of files) {
-        if (this.isCodeFile(file.name)) {
-          const content = await this.getFileContent(owner, repo, file.path);
-          if (content) {
-            // Scan for vulnerabilities
-            const fileVulns = this.scanCodeVulnerabilities(content, file.name);
-            codeQuality.push(...fileVulns);
-            
-            // Scan for secrets
-            const fileSecrets = this.scanSecrets(content, file.name);
-            secrets.push(...fileSecrets);
-          }
+        try {
+          const licenseRisk = this.analyzeLicense(repoInfo.license.spdx_id);
+          if (licenseRisk) licenseRisks.push(licenseRisk);
+        } catch (licenseError) {
+          console.warn('License analysis failed:', licenseError);
         }
       }
 
-      // Check for dependency vulnerabilities
-      const depVulns = await this.checkDependencyVulnerabilities(owner, repo);
-      vulnerabilities.push(...depVulns);
+      // Get repository files for code analysis (with error handling)
+      try {
+        const files = await this.getRepositoryFiles(owner, repo);
+        
+        // Analyze code files (limit to prevent timeouts)
+        for (const file of files.slice(0, 15)) { // Limit to 15 files max
+          if (this.isCodeFile(file.name)) {
+            try {
+              const content = await this.getFileContent(owner, repo, file.path);
+              if (content) {
+                // Scan for vulnerabilities
+                const fileVulns = this.scanCodeVulnerabilities(content, file.name);
+                codeQuality.push(...fileVulns);
+                
+                // Scan for secrets
+                const fileSecrets = this.scanSecrets(content, file.name);
+                secrets.push(...fileSecrets);
+              }
+            } catch (fileError) {
+              console.warn(`Failed to analyze file ${file.name}:`, fileError);
+              // Continue with other files
+            }
+          }
+        }
+      } catch (filesError) {
+        console.warn('Failed to fetch repository files for code analysis:', filesError);
+        // Continue without code analysis
+      }
+
+      // Check for dependency vulnerabilities (with error handling)
+      try {
+        const depVulns = await this.checkDependencyVulnerabilities(owner, repo);
+        vulnerabilities.push(...depVulns);
+      } catch (depError) {
+        console.warn('Dependency vulnerability check failed:', depError);
+        // Continue without dependency analysis
+      }
 
     } catch (error) {
       console.error('Security analysis error:', error);
+      // Return basic analysis even if there were errors
     }
 
     // Calculate overall security score
@@ -166,8 +186,17 @@ export class SecurityAnalyzer {
       headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
     }
 
-    const response = await fetch(url, { headers });
-    return await response.json();
+    try {
+      const response = await fetch(url, { headers });
+      if (!response.ok) {
+        console.warn(`Failed to fetch repository info for ${owner}/${repo}: ${response.status}`);
+        return {}; // Return empty object instead of throwing
+      }
+      return await response.json();
+    } catch (error) {
+      console.warn(`Error fetching repository info for ${owner}/${repo}:`, error);
+      return {}; // Return empty object instead of throwing
+    }
   }
 
   private async getRepositoryFiles(owner: string, repo: string, path: string = ''): Promise<any[]> {
@@ -183,24 +212,33 @@ export class SecurityAnalyzer {
 
     try {
       const response = await fetch(url, { headers });
-      if (!response.ok) return [];
+      if (!response.ok) {
+        console.warn(`Failed to fetch repository files for ${owner}/${repo}: ${response.status}`);
+        return [];
+      }
       
       const files = await response.json() as any[];
       let allFiles: any[] = [];
       
-      for (const file of files.slice(0, 20)) { // Limit to prevent rate limiting
+      // Limit files to prevent rate limiting and timeouts
+      for (const file of files.slice(0, 10)) { // Reduced from 20 to 10
         if (file.type === 'file') {
           allFiles.push(file);
-        } else if (file.type === 'dir' && allFiles.length < 50) {
-          const subFiles = await this.getRepositoryFiles(owner, repo, file.path);
-          allFiles.push(...subFiles.slice(0, 10)); // Limit subdirectory files
+        } else if (file.type === 'dir' && allFiles.length < 20) { // Reduced from 50 to 20
+          try {
+            const subFiles = await this.getRepositoryFiles(owner, repo, file.path);
+            allFiles.push(...subFiles.slice(0, 5)); // Reduced from 10 to 5
+          } catch (error) {
+            console.warn(`Failed to fetch subdirectory files for ${file.path}:`, error);
+            // Continue with other files instead of failing completely
+          }
         }
       }
       
       return allFiles;
     } catch (error) {
-      console.error('Error fetching repository files:', error);
-      return [];
+      console.error(`Error fetching repository files for ${owner}/${repo}:`, error);
+      return []; // Return empty array instead of throwing
     }
   }
 
@@ -217,16 +255,25 @@ export class SecurityAnalyzer {
 
     try {
       const response = await fetch(url, { headers });
-      if (!response.ok) return null;
-      
-      const file = await response.json() as any;
-      if (file.content && file.encoding === 'base64') {
-        return Buffer.from(file.content, 'base64').toString('utf-8');
+      if (!response.ok) {
+        console.warn(`Failed to fetch file content for ${path}: ${response.status}`);
+        return null;
       }
+      
+      const data = await response.json() as { content?: string; encoding?: string };
+      if (data.content && data.encoding === 'base64') {
+        try {
+          return Buffer.from(data.content, 'base64').toString('utf-8');
+        } catch (decodeError) {
+          console.warn(`Failed to decode file content for ${path}:`, decodeError);
+          return null;
+        }
+      }
+      
       return null;
     } catch (error) {
-      console.error(`Error fetching file content for ${path}:`, error);
-      return null;
+      console.warn(`Error fetching file content for ${path}:`, error);
+      return null; // Return null instead of throwing
     }
   }
 
@@ -300,15 +347,37 @@ export class SecurityAnalyzer {
   }
 
   private async checkDependencyVulnerabilities(owner: string, repo: string): Promise<Vulnerability[]> {
-    // This would integrate with vulnerability databases like Snyk, GitHub Security Advisory, etc.
-    // For now, we'll return a placeholder
+    // This is a simplified vulnerability check
+    // In a real implementation, you'd integrate with vulnerability databases
     const vulnerabilities: Vulnerability[] = [];
     
-    // In a real implementation, this would:
-    // 1. Parse package.json, requirements.txt, pom.xml, etc.
-    // 2. Check each dependency against CVE databases
-    // 3. Return known vulnerabilities
-    
+    try {
+      // Check for common vulnerable dependencies by checking package files
+      const packageFiles = ['package.json', 'requirements.txt', 'Gemfile', 'pom.xml'];
+      
+      for (const file of packageFiles) {
+        try {
+          const content = await this.getFileContent(owner, repo, file);
+          if (content) {
+            // Simple checks for known vulnerable patterns
+            if (file === 'package.json' && content.includes('lodash')) {
+              // Example vulnerability check
+              vulnerabilities.push({
+                type: 'DEPENDENCY',
+                severity: 'MEDIUM',
+                description: 'Potential lodash vulnerability - check for prototype pollution issues'
+              });
+            }
+          }
+        } catch (fileError) {
+          console.warn(`Failed to check ${file} for vulnerabilities:`, fileError);
+          // Continue with other files
+        }
+      }
+    } catch (error) {
+      console.warn('Error in dependency vulnerability check:', error);
+    }
+
     return vulnerabilities;
   }
 
