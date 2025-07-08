@@ -16,11 +16,11 @@ services:
         sync: false  # Will be set manually in Render dashboard
 
   # Frontend Static Site
-  - type: web
+  - type: static
     name: nosana-github-insights-frontend
-    env: static
     buildCommand: cd frontend && npm install && npm run build
-    staticPublishPath: frontend/build
+    publishPath: frontend/build
+    pullRequestPreviewsEnabled: false
     routes:
       - type: rewrite
         source: /*
