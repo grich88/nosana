@@ -185,7 +185,7 @@ export class SecurityAnalyzer {
       const response = await fetch(url, { headers });
       if (!response.ok) return [];
       
-      const files = await response.json();
+      const files = await response.json() as any[];
       let allFiles: any[] = [];
       
       for (const file of files.slice(0, 20)) { // Limit to prevent rate limiting
@@ -219,7 +219,7 @@ export class SecurityAnalyzer {
       const response = await fetch(url, { headers });
       if (!response.ok) return null;
       
-      const file = await response.json();
+      const file = await response.json() as any;
       if (file.content && file.encoding === 'base64') {
         return Buffer.from(file.content, 'base64').toString('utf-8');
       }
