@@ -137,6 +137,45 @@ app.post('/security', async (req: Request, res: Response) => {
   }
 });
 
+// Add analyze-security endpoint to match frontend expectations
+app.post('/analyze-security', async (req: Request, res: Response) => {
+  try {
+    const { message } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+    
+    const repoInfo = parseRepositoryFromMessage(message);
+    if (!repoInfo) {
+      return res.status(400).json({ 
+        error: 'Could not parse repository information. Please provide in format: owner/repo or GitHub URL' 
+      });
+    }
+    
+    const { owner, repo } = repoInfo;
+    
+    // Perform security analysis
+    const securityAnalysis = await securityAnalyzer.analyzeRepository(owner, repo);
+    
+    // Format the security response
+    const response = formatSecurityAnalysis(owner, repo, securityAnalysis);
+    
+    res.json({
+      response,
+      securityDetails: securityAnalysis,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error: any) {
+    console.error('Security analysis error:', error);
+    res.status(500).json({ 
+      error: 'Internal server error', 
+      message: error.message 
+    });
+  }
+});
+
 // Function to analyze repository health
 function analyzeRepositoryHealth(data: any): { status: string; score: number; factors: string[] } {
   const factors: string[] = [];
@@ -2053,26 +2092,326 @@ async function analyzeIssuesWithAI(issues: any[], owner: string, repo: string): 
 }
 
 async function getRecentPullRequests(owner: string, repo: string, limit: number = 20): Promise<any[]> {
-  console.log(`Getting pull requests for ${owner}/${repo} - feature in development`);
-  return [];
+  const url = `https://api.github.com/repos/${owner}/${repo}/pulls?state=all&per_page=${limit}&sort=updated`;
+  
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'Nosana-GitHub-Insights-Agent',
+  };
+  
+  if (process.env.GITHUB_TOKEN) {
+    headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+  }
+
+  try {
+    const response = await fetch(url, { headers });
+    
+    if (!response.ok) {
+      if (response.status === 403) {
+        console.warn(`Rate limited when fetching pull requests for ${owner}/${repo}`);
+        return [];
+      }
+      throw new Error(`GitHub API error: ${response.status}`);
+    }
+    
+    return await response.json() as any[];
+  } catch (error) {
+    console.error(`Error fetching pull requests for ${owner}/${repo}:`, error);
+    return [];
+  }
 }
 
 async function analyzePullRequestsWithAI(pullRequests: any[], owner: string, repo: string): Promise<string> {
-  return `🔄 **Pull Request Analysis for ${owner}/${repo}**\n\n🚧 Advanced PR analysis is being enhanced!\n\n📊 **Planned Features:**\n- Code review insights\n- Merge pattern analysis\n- Contribution trends\n- Quality metrics\n\nExplore our Repository Overview for current insights!`;
+  if (pullRequests.length === 0) {
+    return `🔄 **Pull Request Analysis for ${owner}/${repo}**\n\n⚠️ **No Pull Requests Found**: This could mean:\n\n💡 **Possible Reasons:**\n- Very new repository\n- Single maintainer workflow\n- All development done on main branch\n- Private repository or API rate limits\n\n🎯 **Recommendations:**\n- Consider using pull requests for code review\n- Implement branch protection rules\n- Encourage community contributions`;
+  }
+
+  // Categorize pull requests
+  const mergedPRs = pullRequests.filter(pr => pr.merged_at);
+  const openPRs = pullRequests.filter(pr => pr.state === 'open');
+  const closedPRs = pullRequests.filter(pr => pr.state === 'closed' && !pr.merged_at);
+
+  // Calculate metrics
+  const mergeRate = pullRequests.length > 0 ? (mergedPRs.length / pullRequests.length) * 100 : 0;
+  const recentPRs = pullRequests.filter(pr => {
+    const updatedDate = new Date(pr.updated_at);
+    const daysSinceUpdate = (Date.now() - updatedDate.getTime()) / (1000 * 60 * 60 * 24);
+    return daysSinceUpdate <= 30;
+  });
+
+  // Analyze response times for merged PRs
+  const prResponseTimes = mergedPRs
+    .filter(pr => pr.created_at && pr.merged_at)
+    .map(pr => {
+      const created = new Date(pr.created_at);
+      const merged = new Date(pr.merged_at);
+      return (merged.getTime() - created.getTime()) / (1000 * 60 * 60 * 24); // days
+    });
+
+  const avgResponseTime = prResponseTimes.length > 0 
+    ? prResponseTimes.reduce((sum, time) => sum + time, 0) / prResponseTimes.length
+    : 0;
+
+  let analysis = `🔄 **Pull Request Analysis for ${owner}/${repo}**\n\n`;
+  
+  // Overview
+  analysis += `📊 **Pull Request Overview**\n`;
+  analysis += `- Total PRs (recent): ${pullRequests.length}\n`;
+  analysis += `- 🟢 Merged: ${mergedPRs.length}\n`;
+  analysis += `- 🟡 Open: ${openPRs.length}\n`;
+  analysis += `- 🔴 Closed (unmerged): ${closedPRs.length}\n`;
+  analysis += `- 📈 Merge Rate: ${mergeRate.toFixed(1)}%\n`;
+  analysis += `- 🕒 Avg. Merge Time: ${avgResponseTime > 0 ? `${avgResponseTime.toFixed(1)} days` : 'N/A'}\n\n`;
+
+  // Recent Activity
+  analysis += `⏰ **Recent Activity (30 days)**\n`;
+  analysis += `- Recent PRs: ${recentPRs.length}\n`;
+  analysis += `- Activity Level: ${recentPRs.length > 5 ? 'High' : recentPRs.length > 2 ? 'Moderate' : 'Low'}\n\n`;
+
+  // Top Recent PRs by Engagement
+  analysis += `🔥 **Most Engaging Recent PRs**\n`;
+  const topPRs = pullRequests
+    .sort((a, b) => (b.comments + (b.review_comments || 0)) - (a.comments + (a.review_comments || 0)))
+    .slice(0, 5);
+
+  topPRs.forEach((pr, index) => {
+    const engagement = pr.comments + (pr.review_comments || 0);
+    const status = pr.merged_at ? '✅ Merged' : pr.state === 'open' ? '🟡 Open' : '❌ Closed';
+    analysis += `${index + 1}. [${pr.title}](${pr.html_url}) ${status}\n`;
+    analysis += `   💬 ${engagement} comments | by @${pr.user.login}\n`;
+  });
+  analysis += '\n';
+
+  // Analysis & Insights
+  analysis += `💡 **Development Insights**\n\n`;
+
+  if (mergeRate > 80) {
+    analysis += `✅ **High Merge Rate**: ${mergeRate.toFixed(1)}% of PRs get merged - indicates good code quality and review process.\n\n`;
+  } else if (mergeRate > 60) {
+    analysis += `🟡 **Moderate Merge Rate**: ${mergeRate.toFixed(1)}% merge rate suggests selective review process.\n\n`;
+  } else if (mergeRate < 40) {
+    analysis += `⚠️ **Low Merge Rate**: ${mergeRate.toFixed(1)}% merge rate may indicate strict standards or communication issues.\n\n`;
+  }
+
+  if (avgResponseTime > 0) {
+    if (avgResponseTime <= 2) {
+      analysis += `⚡ **Fast Response**: PRs merged in ~${avgResponseTime.toFixed(1)} days on average - excellent responsiveness!\n\n`;
+    } else if (avgResponseTime <= 7) {
+      analysis += `✅ **Good Response**: PRs merged in ~${avgResponseTime.toFixed(1)} days on average - healthy review cycle.\n\n`;
+    } else if (avgResponseTime <= 30) {
+      analysis += `🟡 **Slow Response**: PRs take ~${avgResponseTime.toFixed(1)} days to merge - consider streamlining review process.\n\n`;
+    } else {
+      analysis += `🔴 **Very Slow**: PRs take ${avgResponseTime.toFixed(1)} days to merge - may discourage contributors.\n\n`;
+    }
+  }
+
+  if (openPRs.length > mergedPRs.length && openPRs.length > 5) {
+    analysis += `📋 **PR Backlog**: ${openPRs.length} open PRs may need attention from maintainers.\n\n`;
+  }
+
+  // Recommendations
+  analysis += `🎯 **Recommendations**\n\n`;
+  
+  if (mergeRate < 60) {
+    analysis += `- Review PR rejection patterns to improve contributor guidance\n`;
+    analysis += `- Consider clearer contribution guidelines\n`;
+  }
+  
+  if (avgResponseTime > 7) {
+    analysis += `- Work on faster PR review cycles to maintain contributor momentum\n`;
+    analysis += `- Consider assigning dedicated reviewers\n`;
+  }
+  
+  if (openPRs.length > 10) {
+    analysis += `- Address the backlog of ${openPRs.length} open PRs\n`;
+    analysis += `- Prioritize older PRs to maintain contributor trust\n`;
+  }
+  
+  analysis += `- Engage with contributors through PR comments and reviews\n`;
+  analysis += `- Use draft PRs for work-in-progress contributions\n\n`;
+
+  // Project Health Score
+  let healthScore = 50;
+  if (mergeRate > 70) healthScore += 20;
+  else if (mergeRate > 50) healthScore += 10;
+  
+  if (avgResponseTime > 0 && avgResponseTime <= 7) healthScore += 20;
+  else if (avgResponseTime <= 14) healthScore += 10;
+  
+  if (recentPRs.length > 0) healthScore += 10;
+  
+  healthScore = Math.min(100, Math.max(0, healthScore));
+  
+  analysis += `📊 **PR Health Score: ${healthScore}/100**\n`;
+  
+  if (healthScore >= 80) {
+    analysis += `🟢 Excellent - Well-managed PR workflow\n`;
+  } else if (healthScore >= 60) {
+    analysis += `🟡 Good - Active development with room for improvement\n`;
+  } else if (healthScore >= 40) {
+    analysis += `🟠 Moderate - PR process needs attention\n`;
+  } else {
+    analysis += `🔴 Needs Work - PR workflow requires significant improvement\n`;
+  }
+
+  return analysis;
 }
 
 async function getContributors(owner: string, repo: string, limit: number = 30): Promise<any[]> {
-  console.log(`Getting contributors for ${owner}/${repo} - feature in development`);
-  return [];
+  const url = `https://api.github.com/repos/${owner}/${repo}/contributors?per_page=${limit}`;
+  
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'Nosana-GitHub-Insights-Agent',
+  };
+  
+  if (process.env.GITHUB_TOKEN) {
+    headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+  }
+
+  try {
+    const response = await fetch(url, { headers });
+    
+    if (!response.ok) {
+      if (response.status === 403) {
+        console.warn(`Rate limited when fetching contributors for ${owner}/${repo}`);
+        return [];
+      }
+      throw new Error(`GitHub API error: ${response.status}`);
+    }
+    
+    return await response.json() as any[];
+  } catch (error) {
+    console.error(`Error fetching contributors for ${owner}/${repo}:`, error);
+    return [];
+  }
 }
 
 async function getRecentCommits(owner: string, repo: string, limit: number = 30): Promise<any[]> {
-  console.log(`Getting commits for ${owner}/${repo} - feature in development`);
-  return [];
+  const url = `https://api.github.com/repos/${owner}/${repo}/commits?per_page=${limit}`;
+  
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'Nosana-GitHub-Insights-Agent',
+  };
+  
+  if (process.env.GITHUB_TOKEN) {
+    headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+  }
+
+  try {
+    const response = await fetch(url, { headers });
+    
+    if (!response.ok) {
+      if (response.status === 403) {
+        console.warn(`Rate limited when fetching commits for ${owner}/${repo}`);
+        return [];
+      }
+      throw new Error(`GitHub API error: ${response.status}`);
+    }
+    
+    return await response.json() as any[];
+  } catch (error) {
+    console.error(`Error fetching commits for ${owner}/${repo}:`, error);
+    return [];
+  }
 }
 
 async function analyzeContributorsWithAI(contributors: any[], commits: any[], owner: string, repo: string): Promise<string> {
-  return `👥 **Contributors Analysis for ${owner}/${repo}**\n\n🚧 Community analysis is being enhanced!\n\n🎯 **Coming Features:**\n- Developer activity patterns\n- Contribution insights\n- Team dynamics analysis\n- Expertise mapping\n\nCheck out our Repository Overview for basic stats!`;
+  if (contributors.length === 0) {
+    return `👥 **Contributors Analysis for ${owner}/${repo}**\n\n⚠️ **Limited Access**: No contributor data available (likely due to API rate limits or repository privacy).\n\n💡 **Recommendations:**\n- Add a GitHub token for enhanced data access\n- Check if the repository is public\n- Try again later if rate limited`;
+  }
+
+  const totalContributions = contributors.reduce((sum, contributor) => sum + contributor.contributions, 0);
+  const topContributors = contributors.slice(0, 10);
+  
+  // Calculate contribution distribution
+  const top10Contributions = topContributors.reduce((sum, contributor) => sum + contributor.contributions, 0);
+  const concentrationRatio = (top10Contributions / totalContributions) * 100;
+
+  let analysis = `👥 **Contributors Analysis for ${owner}/${repo}**\n\n`;
+  
+  // Overview
+  analysis += `📊 **Community Overview**\n`;
+  analysis += `- Total Contributors: ${contributors.length}\n`;
+  analysis += `- Total Contributions: ${formatNumber(totalContributions)}\n`;
+  analysis += `- Top 10 Contributors: ${concentrationRatio.toFixed(1)}% of all contributions\n\n`;
+
+  // Top Contributors
+  analysis += `🏆 **Top Contributors**\n`;
+  topContributors.forEach((contributor, index) => {
+    const percentage = ((contributor.contributions / totalContributions) * 100).toFixed(1);
+    analysis += `${index + 1}. [${contributor.login}](${contributor.html_url}) - ${formatNumber(contributor.contributions)} commits (${percentage}%)\n`;
+  });
+  analysis += '\n';
+
+  // Community Health Analysis
+  analysis += `💡 **Community Health Insights**\n\n`;
+
+  if (contributors.length === 1) {
+    analysis += `🔴 **Single Contributor**: This project is maintained by one person. Consider:\n`;
+    analysis += `- Contributing to reduce bus factor risk\n`;
+    analysis += `- Following the project to stay updated\n`;
+    analysis += `- Offering help with documentation or testing\n\n`;
+  } else if (contributors.length < 5) {
+    analysis += `🟡 **Small Team**: Very small contributor base (${contributors.length} people).\n`;
+    analysis += `- Consider contributing to help grow the community\n`;
+    analysis += `- Project may benefit from more diverse input\n\n`;
+  } else if (contributors.length < 20) {
+    analysis += `🟢 **Active Community**: Healthy contributor base (${contributors.length} people).\n`;
+    analysis += `- Good balance of maintainers and contributors\n`;
+    analysis += `- Multiple people can maintain the project\n\n`;
+  } else {
+    analysis += `🎉 **Thriving Community**: Large contributor base (${contributors.length} people)!\n`;
+    analysis += `- Strong community involvement\n`;
+    analysis += `- Diverse perspectives and expertise\n`;
+    analysis += `- Lower bus factor risk\n\n`;
+  }
+
+  // Contribution Distribution Analysis
+  if (concentrationRatio > 80) {
+    analysis += `⚠️ **High Concentration**: Top contributors handle ${concentrationRatio.toFixed(1)}% of work.\n`;
+    analysis += `- Consider encouraging more distributed contributions\n`;
+    analysis += `- Good opportunity for new contributors to make meaningful impact\n\n`;
+  } else if (concentrationRatio > 60) {
+    analysis += `🟡 **Moderate Concentration**: Top contributors handle ${concentrationRatio.toFixed(1)}% of work.\n`;
+    analysis += `- Reasonably distributed but could benefit from broader participation\n\n`;
+  } else {
+    analysis += `✅ **Well Distributed**: Contributions are well spread across contributors.\n`;
+    analysis += `- Healthy distribution reduces dependency on any single person\n\n`;
+  }
+
+  // Recommendations
+  analysis += `🎯 **Recommendations for Contributors**\n`;
+  analysis += `- Look for "good first issue" or "help wanted" labels\n`;
+  analysis += `- Start with documentation improvements or small bug fixes\n`;
+  analysis += `- Engage with the community through issues and discussions\n`;
+  analysis += `- Consider offering expertise in areas where you're skilled\n\n`;
+
+  // Community Score
+  let communityScore = 50;
+  if (contributors.length >= 20) communityScore += 20;
+  else if (contributors.length >= 10) communityScore += 15;
+  else if (contributors.length >= 5) communityScore += 10;
+  
+  if (concentrationRatio < 60) communityScore += 15;
+  else if (concentrationRatio < 80) communityScore += 10;
+  
+  communityScore = Math.min(100, Math.max(0, communityScore));
+  
+  analysis += `📊 **Community Health Score: ${communityScore}/100**\n`;
+  
+  if (communityScore >= 80) {
+    analysis += `🟢 Excellent - Thriving, well-distributed community\n`;
+  } else if (communityScore >= 60) {
+    analysis += `🟡 Good - Active community with room for growth\n`;
+  } else if (communityScore >= 40) {
+    analysis += `🟠 Moderate - Small but functional community\n`;
+  } else {
+    analysis += `🔴 Needs Growth - Limited community participation\n`;
+  }
+
+  return analysis;
 }
 
 async function analyzeDependencyHealth(owner: string, repo: string): Promise<any> {
@@ -2084,8 +2423,33 @@ async function analyzeDependencyHealth(owner: string, repo: string): Promise<any
 }
 
 async function getRecentReleases(owner: string, repo: string, limit: number = 10): Promise<any[]> {
-  console.log(`Getting releases for ${owner}/${repo} - feature in development`);
-  return [];
+  const url = `https://api.github.com/repos/${owner}/${repo}/releases?per_page=${limit}`;
+  
+  const headers: Record<string, string> = {
+    'Accept': 'application/vnd.github.v3+json',
+    'User-Agent': 'Nosana-GitHub-Insights-Agent',
+  };
+  
+  if (process.env.GITHUB_TOKEN) {
+    headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+  }
+
+  try {
+    const response = await fetch(url, { headers });
+    
+    if (!response.ok) {
+      if (response.status === 403) {
+        console.warn(`Rate limited when fetching releases for ${owner}/${repo}`);
+        return [];
+      }
+      throw new Error(`GitHub API error: ${response.status}`);
+    }
+    
+    return await response.json() as any[];
+  } catch (error) {
+    console.error(`Error fetching releases for ${owner}/${repo}:`, error);
+    return [];
+  }
 }
 
 async function generateReleaseNotesWithAI(releases: any[], commits: any[], owner: string, repo: string): Promise<string> {
