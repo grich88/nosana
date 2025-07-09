@@ -1883,38 +1883,875 @@ function calculateEstimatedEarnings(bountyIssues: any[]): any {
 }
 
 async function analyzeCodePatterns(owner: string, repo: string): Promise<any[]> {
-  console.log('Code pattern analysis requested - feature in development');
-  return [];
+  // Get repository information to analyze patterns
+  try {
+    const repoData = await getGitHubRepoInfo(owner, repo);
+    const contributors = await getContributors(owner, repo, 10);
+    const commits = await getRecentCommits(owner, repo, 50);
+    const issues = await getOpenIssues(owner, repo, 20);
+    
+    // Analyze patterns from available data
+    const patterns = [];
+    
+    // Language pattern
+    if (repoData.language) {
+      patterns.push({
+        type: 'language',
+        pattern: repoData.language,
+        confidence: 'high',
+        description: `Primary language: ${repoData.language}`
+      });
+    }
+    
+    // Size pattern
+    patterns.push({
+      type: 'size',
+      pattern: repoData.size > 100000 ? 'large' : repoData.size > 10000 ? 'medium' : 'small',
+      confidence: 'high',
+      description: `Repository size: ${formatNumber(repoData.size)} KB`
+    });
+    
+    // Activity pattern
+    const daysSinceUpdate = Math.floor((Date.now() - new Date(repoData.updated_at).getTime()) / (1000 * 60 * 60 * 24));
+    patterns.push({
+      type: 'activity',
+      pattern: daysSinceUpdate <= 7 ? 'very_active' : daysSinceUpdate <= 30 ? 'active' : daysSinceUpdate <= 90 ? 'moderate' : 'low',
+      confidence: 'high',
+      description: `Last updated ${daysSinceUpdate} days ago`
+    });
+    
+    // Community pattern
+    if (contributors.length > 0) {
+      patterns.push({
+        type: 'community',
+        pattern: contributors.length > 50 ? 'large_community' : contributors.length > 10 ? 'medium_community' : 'small_community',
+        confidence: 'medium',
+        description: `${contributors.length} contributors`
+      });
+    }
+    
+    // Issue management pattern
+    if (issues.length > 0) {
+      const issueRatio = issues.length / Math.max(repoData.stargazers_count, 1);
+      patterns.push({
+        type: 'maintenance',
+        pattern: issueRatio < 0.02 ? 'well_maintained' : issueRatio < 0.05 ? 'moderately_maintained' : 'needs_attention',
+        confidence: 'medium',
+        description: `${issues.length} open issues vs ${repoData.stargazers_count} stars`
+      });
+    }
+    
+    return patterns;
+  } catch (error) {
+    console.error(`Error analyzing patterns for ${owner}/${repo}:`, error);
+    return [];
+  }
 }
 
 async function analyzePatternsWithAI(patterns: any[], owner: string, repo: string): Promise<string> {
-  return `🧠 **Code Pattern Analysis for ${owner}/${repo}**\n\n🚧 Advanced pattern recognition is being developed!\n\n🔍 **Coming Features:**\n- AI-powered pattern detection\n- Code quality insights\n- Best practice recommendations\n- Architecture analysis\n\nTry our Security Analysis or Issues Analysis for immediate insights!`;
+  if (patterns.length === 0) {
+    return `🧠 **Code Pattern Analysis for ${owner}/${repo}**\n\n⚠️ **Limited Data**: Unable to analyze patterns due to API constraints or repository privacy.\n\n💡 **Try:**\n- Adding a GitHub token for enhanced access\n- Using a different public repository\n- Checking our other analysis features`;
+  }
+
+  let analysis = `🧠 **Code Pattern Analysis for ${owner}/${repo}**\n\n`;
+  
+  // Categorize patterns
+  const languagePatterns = patterns.filter(p => p.type === 'language');
+  const activityPatterns = patterns.filter(p => p.type === 'activity');
+  const communityPatterns = patterns.filter(p => p.type === 'community');
+  const maintenancePatterns = patterns.filter(p => p.type === 'maintenance');
+  const sizePatterns = patterns.filter(p => p.type === 'size');
+
+  // Overview
+  analysis += `📊 **Pattern Overview**\n`;
+  analysis += `- Total Patterns Detected: ${patterns.length}\n`;
+  analysis += `- Analysis Confidence: ${patterns.filter(p => p.confidence === 'high').length} high, ${patterns.filter(p => p.confidence === 'medium').length} medium\n\n`;
+
+  // Language Patterns
+  if (languagePatterns.length > 0) {
+    analysis += `💻 **Technology Patterns**\n`;
+    languagePatterns.forEach(pattern => {
+      analysis += `- **${pattern.pattern}**: ${pattern.description}\n`;
+    });
+    analysis += '\n';
+  }
+
+  // Activity Patterns
+  if (activityPatterns.length > 0) {
+    analysis += `⚡ **Activity Patterns**\n`;
+    activityPatterns.forEach(pattern => {
+      const emoji = pattern.pattern === 'very_active' ? '🔥' : pattern.pattern === 'active' ? '✅' : pattern.pattern === 'moderate' ? '🟡' : '⚠️';
+      analysis += `- ${emoji} **${pattern.pattern.replace('_', ' ').toUpperCase()}**: ${pattern.description}\n`;
+    });
+    analysis += '\n';
+  }
+
+  // Community Patterns
+  if (communityPatterns.length > 0) {
+    analysis += `👥 **Community Patterns**\n`;
+    communityPatterns.forEach(pattern => {
+      const emoji = pattern.pattern === 'large_community' ? '🎉' : pattern.pattern === 'medium_community' ? '👥' : '👤';
+      analysis += `- ${emoji} **${pattern.pattern.replace('_', ' ').toUpperCase()}**: ${pattern.description}\n`;
+    });
+    analysis += '\n';
+  }
+
+  // Maintenance Patterns
+  if (maintenancePatterns.length > 0) {
+    analysis += `🔧 **Maintenance Patterns**\n`;
+    maintenancePatterns.forEach(pattern => {
+      const emoji = pattern.pattern === 'well_maintained' ? '✅' : pattern.pattern === 'moderately_maintained' ? '🟡' : '⚠️';
+      analysis += `- ${emoji} **${pattern.pattern.replace('_', ' ').toUpperCase()}**: ${pattern.description}\n`;
+    });
+    analysis += '\n';
+  }
+
+  // Size Patterns
+  if (sizePatterns.length > 0) {
+    analysis += `📏 **Scale Patterns**\n`;
+    sizePatterns.forEach(pattern => {
+      const emoji = pattern.pattern === 'large' ? '🏢' : pattern.pattern === 'medium' ? '🏠' : '🏃';
+      analysis += `- ${emoji} **${pattern.pattern.toUpperCase()} PROJECT**: ${pattern.description}\n`;
+    });
+    analysis += '\n';
+  }
+
+  // AI Insights
+  analysis += `🤖 **AI-Generated Insights**\n\n`;
+
+  // Generate insights based on pattern combinations
+  const activityLevel = activityPatterns[0]?.pattern || 'unknown';
+  const communitySize = communityPatterns[0]?.pattern || 'unknown';
+  const maintenanceLevel = maintenancePatterns[0]?.pattern || 'unknown';
+
+  if (activityLevel === 'very_active' && communitySize === 'large_community') {
+    analysis += `🚀 **Thriving Ecosystem**: High activity with large community suggests excellent project health and growth potential.\n\n`;
+  } else if (activityLevel === 'low' && communitySize === 'small_community') {
+    analysis += `📉 **Dormant Project**: Low activity and small community may indicate declining interest or project completion.\n\n`;
+  } else if (maintenanceLevel === 'well_maintained' && activityLevel === 'active') {
+    analysis += `⭐ **Quality Project**: Well-maintained with consistent activity indicates reliable, professional development practices.\n\n`;
+  }
+
+  if (maintenanceLevel === 'needs_attention') {
+    analysis += `⚠️ **Maintenance Alert**: High issue-to-star ratio suggests the project may need more maintainer attention.\n\n`;
+  }
+
+  // Recommendations
+  analysis += `🎯 **Pattern-Based Recommendations**\n\n`;
+
+  if (activityLevel === 'very_active') {
+    analysis += `- **For Contributors**: Great time to contribute - active maintainers likely to review PRs quickly\n`;
+  } else if (activityLevel === 'low') {
+    analysis += `- **For Users**: Consider alternatives or check if project is stable/complete\n`;
+  }
+
+  if (communitySize === 'large_community') {
+    analysis += `- **For Learners**: Large community means good learning resources and support\n`;
+  } else if (communitySize === 'small_community') {
+    analysis += `- **For Contributors**: Small team - your contributions could have significant impact\n`;
+  }
+
+  if (maintenanceLevel === 'well_maintained') {
+    analysis += `- **For Production Use**: Good maintenance patterns suggest reliability for production use\n`;
+  } else if (maintenanceLevel === 'needs_attention') {
+    analysis += `- **For Maintainers**: Consider addressing open issues to improve project health\n`;
+  }
+
+  // Pattern Score
+  let patternScore = 50;
+  if (activityLevel === 'very_active') patternScore += 20;
+  else if (activityLevel === 'active') patternScore += 10;
+  else if (activityLevel === 'low') patternScore -= 15;
+
+  if (communitySize === 'large_community') patternScore += 15;
+  else if (communitySize === 'medium_community') patternScore += 5;
+
+  if (maintenanceLevel === 'well_maintained') patternScore += 15;
+  else if (maintenanceLevel === 'needs_attention') patternScore -= 10;
+
+  patternScore = Math.min(100, Math.max(0, patternScore));
+
+  analysis += `\n📊 **Overall Pattern Health Score: ${patternScore}/100**\n`;
+  
+  if (patternScore >= 80) {
+    analysis += `🟢 Excellent - Strong patterns indicate healthy, thriving project\n`;
+  } else if (patternScore >= 60) {
+    analysis += `🟡 Good - Positive patterns with some areas for improvement\n`;
+  } else if (patternScore >= 40) {
+    analysis += `🟠 Moderate - Mixed patterns suggest caution or specific use cases\n`;
+  } else {
+    analysis += `🔴 Concerning - Pattern analysis suggests significant challenges\n`;
+  }
+
+  return analysis;
 }
 
 async function findSimilarRepositories(owner: string, repo: string): Promise<any[]> {
-  console.log('Similar repo search requested - feature in development');
-  return [];
+  try {
+    const repoData = await getGitHubRepoInfo(owner, repo);
+    const similarRepos = [];
+    
+    // Search for repositories with similar topics/tags
+    if (repoData.topics && repoData.topics.length > 0) {
+      const searchTopic = repoData.topics[0];
+      const searchUrl = `https://api.github.com/search/repositories?q=topic:${searchTopic}&sort=stars&order=desc&per_page=10`;
+      
+      const headers: Record<string, string> = {
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'Nosana-GitHub-Insights-Agent',
+      };
+      
+      if (process.env.GITHUB_TOKEN) {
+        headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+      }
+
+      const response = await fetch(searchUrl, { headers });
+      
+      if (response.ok) {
+        const searchResults = await response.json() as any;
+        const filtered = searchResults.items
+          ?.filter((item: any) => item.full_name !== `${owner}/${repo}`)
+          ?.slice(0, 8)
+          ?.map((item: any) => ({
+            name: item.name,
+            full_name: item.full_name,
+            description: item.description,
+            language: item.language,
+            stars: item.stargazers_count,
+            forks: item.forks_count,
+            topics: item.topics,
+            url: item.html_url,
+            similarity_reason: `Shared topic: ${searchTopic}`
+          })) || [];
+        
+        similarRepos.push(...filtered);
+      }
+    }
+    
+    // If no topics, search by language
+    if (similarRepos.length === 0 && repoData.language) {
+      const searchUrl = `https://api.github.com/search/repositories?q=language:${repoData.language}&sort=stars&order=desc&per_page=6`;
+      
+      const headers: Record<string, string> = {
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'Nosana-GitHub-Insights-Agent',
+      };
+      
+      if (process.env.GITHUB_TOKEN) {
+        headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+      }
+
+      const response = await fetch(searchUrl, { headers });
+      
+      if (response.ok) {
+        const searchResults = await response.json() as any;
+        const filtered = searchResults.items
+          ?.filter((item: any) => item.full_name !== `${owner}/${repo}`)
+          ?.slice(0, 5)
+          ?.map((item: any) => ({
+            name: item.name,
+            full_name: item.full_name,
+            description: item.description,
+            language: item.language,
+            stars: item.stargazers_count,
+            forks: item.forks_count,
+            topics: item.topics,
+            url: item.html_url,
+            similarity_reason: `Same language: ${repoData.language}`
+          })) || [];
+        
+        similarRepos.push(...filtered);
+      }
+    }
+    
+    return similarRepos;
+  } catch (error) {
+    console.error(`Error finding similar repositories for ${owner}/${repo}:`, error);
+    return [];
+  }
 }
 
 async function analyzeSimilarReposWithAI(similarRepos: any[], owner: string, repo: string): Promise<string> {
-  return `🔗 **Similar Repository Analysis for ${owner}/${repo}**\n\n🚧 Repository discovery feature is being enhanced!\n\n📊 **Planned Capabilities:**\n- Technology stack matching\n- Similar project discovery\n- Alternative solution suggestions\n- Community insights\n\nExplore our working features like Overview, Security, or Contributors analysis!`;
+  if (similarRepos.length === 0) {
+    return `🔗 **Similar Repository Analysis for ${owner}/${repo}**\n\n🔍 **No Similar Repositories Found**\n\nThis could mean:\n- Very unique or specialized project\n- Limited API access or rate limiting\n- Repository has no topics or language specified\n\n💡 **Suggestions:**\n- Try adding topics to your repository\n- Check our other analysis features\n- Search manually on GitHub for related projects`;
+  }
+
+  let analysis = `🔗 **Similar Repository Analysis for ${owner}/${repo}**\n\n`;
+  
+  // Overview
+  analysis += `📊 **Discovery Results**\n`;
+  analysis += `- Similar Repositories Found: ${similarRepos.length}\n`;
+  analysis += `- Primary Similarity: ${similarRepos[0]?.similarity_reason || 'Various factors'}\n\n`;
+
+  // Group by similarity reason
+  const topicSimilar = similarRepos.filter(repo => repo.similarity_reason?.includes('topic'));
+  const languageSimilar = similarRepos.filter(repo => repo.similarity_reason?.includes('language'));
+
+  if (topicSimilar.length > 0) {
+    analysis += `🏷️ **Topic-Based Similarities**\n`;
+    topicSimilar.forEach((repo, index) => {
+      analysis += `${index + 1}. [${repo.full_name}](${repo.url})\n`;
+      analysis += `   ⭐ ${formatNumber(repo.stars)} stars | 🍴 ${formatNumber(repo.forks)} forks | ${repo.language || 'N/A'}\n`;
+      analysis += `   ${repo.description || 'No description available'}\n`;
+    });
+    analysis += '\n';
+  }
+
+  if (languageSimilar.length > 0) {
+    analysis += `💻 **Language-Based Similarities**\n`;
+    languageSimilar.forEach((repo, index) => {
+      analysis += `${index + 1}. [${repo.full_name}](${repo.url})\n`;
+      analysis += `   ⭐ ${formatNumber(repo.stars)} stars | 🍴 ${formatNumber(repo.forks)} forks\n`;
+      analysis += `   ${repo.description || 'No description available'}\n`;
+    });
+    analysis += '\n';
+  }
+
+  // Analysis insights
+  analysis += `🧠 **Comparative Insights**\n\n`;
+
+  const avgStars = similarRepos.reduce((sum, repo) => sum + repo.stars, 0) / similarRepos.length;
+  const topRepo = similarRepos.reduce((prev, current) => (prev.stars > current.stars) ? prev : current);
+  
+  analysis += `📈 **Popularity Comparison**\n`;
+  analysis += `- Average stars in similar repos: ${formatNumber(Math.round(avgStars))}\n`;
+  analysis += `- Most popular similar repo: [${topRepo.full_name}](${topRepo.url}) (${formatNumber(topRepo.stars)} stars)\n\n`;
+
+  // Language distribution
+  const languages = similarRepos.map(repo => repo.language).filter(Boolean);
+  const langCount = languages.reduce((acc: any, lang) => {
+    acc[lang] = (acc[lang] || 0) + 1;
+    return acc;
+  }, {});
+
+  if (Object.keys(langCount).length > 1) {
+    analysis += `💻 **Technology Landscape**\n`;
+    Object.entries(langCount)
+      .sort(([,a]: any, [,b]: any) => b - a)
+      .forEach(([lang, count]) => {
+        analysis += `- ${lang}: ${count} repositories\n`;
+      });
+    analysis += '\n';
+  }
+
+  // Recommendations
+  analysis += `🎯 **Recommendations Based on Similar Projects**\n\n`;
+
+  if (avgStars > 1000) {
+    analysis += `🌟 **Competitive Space**: This area has popular projects - consider differentiating your approach\n\n`;
+  } else {
+    analysis += `🚀 **Growth Opportunity**: Similar projects have moderate popularity - good potential for growth\n\n`;
+  }
+
+  analysis += `📚 **For Learning & Inspiration:**\n`;
+  similarRepos.slice(0, 3).forEach(repo => {
+    analysis += `- Study [${repo.name}](${repo.url}) (${formatNumber(repo.stars)} stars) for best practices\n`;
+  });
+
+  analysis += `\n🤝 **For Collaboration:**\n`;
+  analysis += `- Consider contributing to highly-starred similar projects\n`;
+  analysis += `- Look for opportunities to integrate or complement existing solutions\n`;
+  analysis += `- Network with maintainers of popular similar repositories\n\n`;
+
+  analysis += `🔍 **For Competition Analysis:**\n`;
+  analysis += `- Compare feature sets and identify unique value propositions\n`;
+  analysis += `- Analyze user feedback in issues and discussions\n`;
+  analysis += `- Monitor development patterns and release cycles\n\n`;
+
+  // Ecosystem health
+  const totalStars = similarRepos.reduce((sum, repo) => sum + repo.stars, 0);
+  const ecosystemScore = Math.min(100, Math.round((totalStars / similarRepos.length) / 100));
+
+  analysis += `📊 **Ecosystem Health Score: ${ecosystemScore}/100**\n`;
+  
+  if (ecosystemScore >= 80) {
+    analysis += `🟢 Thriving - Very active ecosystem with popular projects\n`;
+  } else if (ecosystemScore >= 60) {
+    analysis += `🟡 Healthy - Active ecosystem with good potential\n`;
+  } else if (ecosystemScore >= 40) {
+    analysis += `🟠 Moderate - Growing ecosystem with opportunities\n`;
+  } else {
+    analysis += `🔴 Emerging - New or niche ecosystem with high potential for innovation\n`;
+  }
+
+  return analysis;
 }
 
 async function generateLearningPath(owner: string, repo: string, currentSkills?: string[], targetRole?: string): Promise<any> {
-  return {
-    summary: `📚 **Learning Path Generator for ${owner}/${repo}**\n\n🚧 Personalized learning paths are being developed!\n\n🎯 **Future Features:**\n- AI-generated learning modules\n- Skill gap analysis\n- Progressive learning tracks\n- Career-focused recommendations\n\nExplore the repository with our Overview and Issues analysis to start learning!`,
-    details: [],
-    timeEstimate: 'Coming Soon'
-  };
+  try {
+    const repoData = await getGitHubRepoInfo(owner, repo);
+    const contributors = await getContributors(owner, repo, 5);
+    const issues = await getOpenIssues(owner, repo, 10);
+    
+    // Analyze repository to create learning path
+    const learningModules = [];
+    const skills = currentSkills || [];
+    const role = targetRole || 'developer';
+    
+    // Core repository understanding
+    learningModules.push({
+      title: 'Repository Exploration',
+      description: `Understand the ${repo} project structure and goals`,
+      tasks: [
+        `Read the README and documentation for ${owner}/${repo}`,
+        'Explore the codebase structure and main directories',
+        'Review recent commits to understand development patterns',
+        'Check the project\'s license and contribution guidelines'
+      ],
+      timeEstimate: '2-4 hours',
+      difficulty: 'Beginner',
+      priority: 'High'
+    });
+
+    // Language-specific learning
+    if (repoData.language) {
+      const hasLanguageSkill = skills.some(skill => 
+        skill.toLowerCase().includes(repoData.language.toLowerCase())
+      );
+      
+      if (!hasLanguageSkill) {
+        learningModules.push({
+          title: `${repoData.language} Fundamentals`,
+          description: `Learn ${repoData.language} basics to contribute effectively`,
+          tasks: [
+            `Complete ${repoData.language} syntax tutorials`,
+            `Practice ${repoData.language} coding exercises`,
+            `Learn ${repoData.language} best practices`,
+            `Set up ${repoData.language} development environment`
+          ],
+          timeEstimate: '1-2 weeks',
+          difficulty: 'Beginner',
+          priority: 'High'
+        });
+      }
+    }
+
+    // Issue-based learning
+    if (issues.length > 0) {
+      const beginnerIssues = issues.filter(issue => 
+        issue.labels?.some((label: any) => 
+          ['good first issue', 'beginner', 'easy'].some(term => 
+            label.name.toLowerCase().includes(term)
+          )
+        )
+      );
+
+      if (beginnerIssues.length > 0) {
+        learningModules.push({
+          title: 'Hands-on Contributing',
+          description: 'Start contributing with beginner-friendly issues',
+          tasks: [
+            'Set up local development environment',
+            'Pick a "good first issue" to work on',
+            'Learn the project\'s testing procedures',
+            'Create your first pull request'
+          ],
+          timeEstimate: '1-2 weeks',
+          difficulty: 'Intermediate',
+          priority: 'High'
+        });
+      }
+    }
+
+    // Role-specific modules
+    if (role.toLowerCase().includes('frontend') || repoData.language === 'JavaScript' || repoData.language === 'TypeScript') {
+      learningModules.push({
+        title: 'Frontend Development Skills',
+        description: 'Master frontend concepts relevant to this project',
+        tasks: [
+          'Learn modern JavaScript/TypeScript features',
+          'Understand component-based architecture',
+          'Practice responsive design principles',
+          'Learn debugging tools and techniques'
+        ],
+        timeEstimate: '2-3 weeks',
+        difficulty: 'Intermediate',
+        priority: 'Medium'
+      });
+    }
+
+    if (role.toLowerCase().includes('backend') || ['Python', 'Java', 'Go', 'Rust'].includes(repoData.language)) {
+      learningModules.push({
+        title: 'Backend Development Skills',
+        description: 'Develop server-side development expertise',
+        tasks: [
+          'Learn API design and development',
+          'Understand database integration',
+          'Practice testing and debugging',
+          'Learn deployment and DevOps basics'
+        ],
+        timeEstimate: '3-4 weeks',
+        difficulty: 'Intermediate',
+        priority: 'Medium'
+      });
+    }
+
+    // Advanced modules
+    learningModules.push({
+      title: 'Open Source Collaboration',
+      description: 'Master collaborative development practices',
+      tasks: [
+        'Learn Git workflow and branching strategies',
+        'Practice code review processes',
+        'Understand issue tracking and project management',
+        'Build your open source portfolio'
+      ],
+      timeEstimate: '1-2 weeks',
+      difficulty: 'Advanced',
+      priority: 'Medium'
+    });
+
+    // Project-specific advanced skills
+    if (repoData.stargazers_count > 1000) {
+      learningModules.push({
+        title: 'Large-Scale Project Skills',
+        description: 'Learn to work on popular, complex projects',
+        tasks: [
+          'Study the project\'s architecture patterns',
+          'Learn performance optimization techniques',
+          'Understand scalability considerations',
+          'Practice working with large codebases'
+        ],
+        timeEstimate: '2-4 weeks',
+        difficulty: 'Advanced',
+        priority: 'Low'
+      });
+    }
+
+    // Calculate total time estimate
+    const timeEstimates = learningModules.map(module => {
+      const time = module.timeEstimate;
+      if (time.includes('hours')) {
+        return parseFloat(time) / 40; // Convert hours to weeks (40 hours per week)
+      } else if (time.includes('weeks')) {
+        return parseFloat(time);
+      }
+      return 1;
+    });
+    
+    const totalWeeks = Math.round(timeEstimates.reduce((sum, time) => sum + time, 0));
+
+    // Generate summary
+    const summary = `📚 **Learning Path for ${owner}/${repo}**\n\n` +
+                   `🎯 **Customized for**: ${role.charAt(0).toUpperCase() + role.slice(1)} role\n` +
+                   `⏱️ **Estimated Duration**: ${totalWeeks} weeks\n` +
+                   `📈 **Progression**: ${learningModules.length} learning modules\n\n` +
+                   `🚀 **Getting Started**\n` +
+                   `1. Begin with "Repository Exploration" to understand the project\n` +
+                   `2. Follow high-priority modules first\n` +
+                   `3. Practice with real issues and contributions\n` +
+                   `4. Build your skills progressively\n\n` +
+                   `💡 **Pro Tip**: Start contributing early with small changes to build confidence and familiarity!\n\n` +
+                   `📋 **Your Learning Modules:**\n\n` +
+                   learningModules.map((module, index) => 
+                     `**${index + 1}. ${module.title}** (${module.timeEstimate})\n` +
+                     `${module.description}\n` +
+                     `Priority: ${module.priority} | Difficulty: ${module.difficulty}\n`
+                   ).join('\n');
+
+    return {
+      summary,
+      details: learningModules,
+      timeEstimate: `${totalWeeks} weeks`
+    };
+
+  } catch (error) {
+    console.error(`Error generating learning path for ${owner}/${repo}:`, error);
+    return {
+      summary: `📚 **Learning Path Generator for ${owner}/${repo}**\n\n⚠️ **Unable to generate learning path** due to API limitations or repository access restrictions.\n\n💡 **General Recommendations:**\n- Start by reading the repository documentation\n- Look for "good first issue" labels\n- Set up the development environment\n- Begin with small contributions\n\nTry our other analysis features for more insights!`,
+      details: [],
+      timeEstimate: 'Variable'
+    };
+  }
 }
 
 async function searchVulnerabilityFixes(vulnerabilityType?: string, cveId?: string, message?: string): Promise<any[]> {
-  console.log('Vulnerability search requested - feature in development');
-  return [];
+  try {
+    const searchTerms = [];
+    const vulnerabilityFixes = [];
+    
+    // Build search queries based on input
+    if (cveId) {
+      searchTerms.push(`CVE-${cveId}`);
+      searchTerms.push(cveId);
+    }
+    
+    if (vulnerabilityType) {
+      searchTerms.push(`${vulnerabilityType} vulnerability fix`);
+      searchTerms.push(`${vulnerabilityType} security patch`);
+    }
+    
+    if (message) {
+      const securityKeywords = ['XSS', 'SQL injection', 'CSRF', 'RCE', 'buffer overflow', 'authentication bypass'];
+      const foundKeywords = securityKeywords.filter(keyword => 
+        message.toLowerCase().includes(keyword.toLowerCase())
+      );
+      searchTerms.push(...foundKeywords.map(keyword => `${keyword} fix`));
+    }
+    
+    // If no specific terms, search for general security fixes
+    if (searchTerms.length === 0) {
+      searchTerms.push('security vulnerability fix', 'CVE patch', 'security update');
+    }
+    
+    // Search GitHub for vulnerability fixes
+    for (const term of searchTerms.slice(0, 3)) { // Limit to avoid rate limiting
+      const searchUrl = `https://api.github.com/search/repositories?q=${encodeURIComponent(term)}&sort=updated&per_page=10`;
+      
+      const headers: Record<string, string> = {
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'Nosana-GitHub-Insights-Agent',
+      };
+      
+      if (process.env.GITHUB_TOKEN) {
+        headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+      }
+
+      try {
+        const response = await fetch(searchUrl, { headers });
+        
+        if (response.ok) {
+          const searchResults = await response.json() as any;
+          const repos = searchResults.items?.slice(0, 5)?.map((item: any) => ({
+            name: item.name,
+            full_name: item.full_name,
+            description: item.description,
+            language: item.language,
+            stars: item.stargazers_count,
+            updated_at: item.updated_at,
+            url: item.html_url,
+            search_term: term,
+            relevance_score: calculateVulnerabilityRelevance(item, term, vulnerabilityType, cveId)
+          })) || [];
+          
+          vulnerabilityFixes.push(...repos);
+        }
+      } catch (searchError) {
+        console.error(`Error searching for term "${term}":`, searchError);
+      }
+    }
+    
+    // Remove duplicates and sort by relevance
+    const uniqueFixes = vulnerabilityFixes.reduce((acc: any[], current) => {
+      if (!acc.find(item => item.full_name === current.full_name)) {
+        acc.push(current);
+      }
+      return acc;
+    }, []);
+    
+    return uniqueFixes
+      .sort((a, b) => b.relevance_score - a.relevance_score)
+      .slice(0, 8);
+      
+  } catch (error) {
+    console.error('Error searching vulnerability fixes:', error);
+    return [];
+  }
+}
+
+function calculateVulnerabilityRelevance(repo: any, searchTerm: string, vulnerabilityType?: string, cveId?: string): number {
+  let score = 0;
+  
+  const description = (repo.description || '').toLowerCase();
+  const name = repo.name.toLowerCase();
+  
+  // CVE ID match gets highest score
+  if (cveId && (description.includes(cveId.toLowerCase()) || name.includes(cveId.toLowerCase()))) {
+    score += 50;
+  }
+  
+  // Vulnerability type match
+  if (vulnerabilityType && (description.includes(vulnerabilityType.toLowerCase()) || name.includes(vulnerabilityType.toLowerCase()))) {
+    score += 30;
+  }
+  
+  // Security-related keywords
+  const securityKeywords = ['security', 'vulnerability', 'patch', 'fix', 'CVE', 'exploit'];
+  securityKeywords.forEach(keyword => {
+    if (description.includes(keyword) || name.includes(keyword)) {
+      score += 10;
+    }
+  });
+  
+  // Popularity boost
+  score += Math.min(repo.stargazers_count / 100, 20);
+  
+  // Recent update boost
+  const daysSinceUpdate = (Date.now() - new Date(repo.updated_at).getTime()) / (1000 * 60 * 60 * 24);
+  if (daysSinceUpdate <= 30) score += 15;
+  else if (daysSinceUpdate <= 90) score += 10;
+  else if (daysSinceUpdate <= 365) score += 5;
+  
+  return score;
 }
 
 async function analyzeVulnerabilityFixesWithAI(vulnFixes: any[], vulnerabilityType?: string): Promise<string> {
-  return `🛡️ **Vulnerability Fix Research**\n\n🚧 Security research feature is being enhanced!\n\n🔍 **Coming Soon:**\n- CVE pattern analysis\n- Fix strategy recommendations\n- Security best practices\n- Vulnerability trend insights\n\nUse our Security Analysis feature for immediate security insights!`;
+  if (vulnFixes.length === 0) {
+    return `🛡️ **Vulnerability Fix Research**\n\n🔍 **No Vulnerability Fixes Found**\n\nThis could indicate:\n- Very specific or new vulnerability with limited fixes\n- Search terms were too narrow\n- API rate limiting or access restrictions\n\n💡 **Try:**\n- Broadening your search terms\n- Checking official security advisories\n- Using our Security Analysis feature for repository-specific insights`;
+  }
+
+  let analysis = `🛡️ **Vulnerability Fix Analysis**\n\n`;
+  
+  if (vulnerabilityType) {
+    analysis += `🎯 **Focused on**: ${vulnerabilityType} vulnerabilities\n\n`;
+  }
+  
+  // Overview
+  analysis += `📊 **Research Results**\n`;
+  analysis += `- Relevant Repositories Found: ${vulnFixes.length}\n`;
+  analysis += `- Average Popularity: ${Math.round(vulnFixes.reduce((sum, fix) => sum + fix.stars, 0) / vulnFixes.length)} stars\n`;
+  
+  // Language distribution
+  const languages = vulnFixes.map(fix => fix.language).filter(Boolean);
+  const langCounts = languages.reduce((acc: any, lang) => {
+    acc[lang] = (acc[lang] || 0) + 1;
+    return acc;
+  }, {});
+  
+  if (Object.keys(langCounts).length > 0) {
+    analysis += `- Languages: ${Object.keys(langCounts).join(', ')}\n`;
+  }
+  analysis += '\n';
+
+  // Top vulnerability fixes
+  analysis += `🔥 **Top Vulnerability Fixes**\n\n`;
+  const topFixes = vulnFixes.slice(0, 5);
+  
+  topFixes.forEach((fix, index) => {
+    analysis += `**${index + 1}. [${fix.full_name}](${fix.url})**\n`;
+    analysis += `⭐ ${formatNumber(fix.stars)} stars | 🔧 ${fix.language || 'Multiple'} | 🔍 Matched: "${fix.search_term}"\n`;
+    analysis += `${fix.description || 'No description available'}\n`;
+    analysis += `Relevance Score: ${fix.relevance_score}/100\n\n`;
+  });
+
+  // Pattern Analysis
+  analysis += `🔍 **Pattern Analysis**\n\n`;
+  
+  // Analyze common themes in descriptions
+  const descriptions = vulnFixes.map(fix => fix.description).filter(Boolean).join(' ').toLowerCase();
+  const securityPatterns = [
+    { pattern: 'xss', name: 'Cross-Site Scripting (XSS)', severity: 'Medium' },
+    { pattern: 'sql injection', name: 'SQL Injection', severity: 'High' },
+    { pattern: 'csrf', name: 'Cross-Site Request Forgery', severity: 'Medium' },
+    { pattern: 'buffer overflow', name: 'Buffer Overflow', severity: 'High' },
+    { pattern: 'authentication', name: 'Authentication Issues', severity: 'High' },
+    { pattern: 'authorization', name: 'Authorization Problems', severity: 'High' },
+    { pattern: 'injection', name: 'Code Injection', severity: 'Critical' },
+    { pattern: 'dos', name: 'Denial of Service', severity: 'Medium' },
+    { pattern: 'rce', name: 'Remote Code Execution', severity: 'Critical' }
+  ];
+
+  const foundPatterns = securityPatterns.filter(p => descriptions.includes(p.pattern));
+  
+  if (foundPatterns.length > 0) {
+    analysis += `**Common Vulnerability Types Found:**\n`;
+    foundPatterns.forEach(pattern => {
+      const severityEmoji = pattern.severity === 'Critical' ? '🚨' : pattern.severity === 'High' ? '⚠️' : '🟡';
+      analysis += `- ${severityEmoji} ${pattern.name} (${pattern.severity})\n`;
+    });
+    analysis += '\n';
+  }
+
+  // Recency analysis
+  const recentFixes = vulnFixes.filter(fix => {
+    const daysSinceUpdate = (Date.now() - new Date(fix.updated_at).getTime()) / (1000 * 60 * 60 * 24);
+    return daysSinceUpdate <= 90;
+  });
+
+  analysis += `📅 **Recency Analysis**\n`;
+  analysis += `- Recent fixes (last 90 days): ${recentFixes.length}/${vulnFixes.length}\n`;
+  if (recentFixes.length > vulnFixes.length * 0.5) {
+    analysis += `✅ Active vulnerability fixing community\n`;
+  } else {
+    analysis += `⚠️ Consider checking for more recent fixes\n`;
+  }
+  analysis += '\n';
+
+  // AI Insights & Recommendations
+  analysis += `🤖 **AI-Generated Insights**\n\n`;
+
+  // Security posture assessment
+  const avgStars = vulnFixes.reduce((sum, fix) => sum + fix.stars, 0) / vulnFixes.length;
+  const hasRecentActivity = recentFixes.length > 0;
+  const hasDiverseLanguages = Object.keys(langCounts).length > 2;
+
+  if (avgStars > 100 && hasRecentActivity) {
+    analysis += `🟢 **Strong Security Community**: High-quality, actively maintained security projects found.\n\n`;
+  } else if (avgStars > 50) {
+    analysis += `🟡 **Moderate Security Ecosystem**: Decent resources available, but verify freshness of fixes.\n\n`;
+  } else {
+    analysis += `🟠 **Emerging Security Area**: Limited but potentially innovative approaches - exercise caution.\n\n`;
+  }
+
+  if (hasDiverseLanguages) {
+    analysis += `🌍 **Cross-Platform Impact**: Vulnerability affects multiple programming languages - broad impact concern.\n\n`;
+  }
+
+  // Severity assessment based on patterns
+  const criticalPatterns = foundPatterns.filter(p => p.severity === 'Critical').length;
+  const highPatterns = foundPatterns.filter(p => p.severity === 'High').length;
+
+  if (criticalPatterns > 0) {
+    analysis += `🚨 **Critical Severity**: Found ${criticalPatterns} critical vulnerability pattern(s) - immediate attention required.\n\n`;
+  } else if (highPatterns > 0) {
+    analysis += `⚠️ **High Priority**: Found ${highPatterns} high-severity pattern(s) - prioritize fixing.\n\n`;
+  }
+
+  // Recommendations
+  analysis += `🎯 **Actionable Recommendations**\n\n`;
+
+  analysis += `**For Developers:**\n`;
+  analysis += `- Review the top-starred repositories for proven fix strategies\n`;
+  analysis += `- Study multiple implementations to understand different approaches\n`;
+  analysis += `- Pay attention to testing methodologies used in these fixes\n`;
+  analysis += `- Consider the language-specific patterns in your technology stack\n\n`;
+
+  analysis += `**For Security Teams:**\n`;
+  analysis += `- Prioritize fixes based on severity patterns identified\n`;
+  analysis += `- Monitor these repositories for new vulnerability discoveries\n`;
+  analysis += `- Consider contributing fixes back to the community\n`;
+  analysis += `- Document lessons learned for future incidents\n\n`;
+
+  analysis += `**For Research:**\n`;
+  if (recentFixes.length > 0) {
+    analysis += `- Recent activity suggests ongoing research - stay updated\n`;
+  }
+  analysis += `- Cross-reference with official CVE databases\n`;
+  analysis += `- Look for common root causes across different implementations\n`;
+  analysis += `- Consider automated testing approaches used in these repositories\n\n`;
+
+  // Fix Quality Score
+  let qualityScore = 50;
+  
+  // Boost for popular repositories
+  if (avgStars > 500) qualityScore += 20;
+  else if (avgStars > 100) qualityScore += 10;
+  
+  // Boost for recent activity
+  if (recentFixes.length > vulnFixes.length * 0.7) qualityScore += 15;
+  else if (recentFixes.length > vulnFixes.length * 0.3) qualityScore += 10;
+  
+  // Boost for diverse languages (indicates widespread issue)
+  if (hasDiverseLanguages) qualityScore += 10;
+  
+  // Reduce for low total results
+  if (vulnFixes.length < 3) qualityScore -= 20;
+  
+  qualityScore = Math.min(100, Math.max(0, qualityScore));
+
+  analysis += `📊 **Fix Research Quality Score: ${qualityScore}/100**\n`;
+  
+  if (qualityScore >= 80) {
+    analysis += `🟢 Excellent - High-quality, diverse fix resources available\n`;
+  } else if (qualityScore >= 60) {
+    analysis += `🟡 Good - Solid fix resources with some limitations\n`;
+  } else if (qualityScore >= 40) {
+    analysis += `🟠 Fair - Limited resources, proceed with additional research\n`;
+  } else {
+    analysis += `🔴 Poor - Insufficient resources, consider alternative research methods\n`;
+  }
+
+  return analysis;
 }
 
 // Additional stub functions for core analysis features
