@@ -23,6 +23,13 @@ interface AnalysisResult {
   releases?: any[];
 }
 
+interface ChatMessage {
+  id: string;
+  type: 'user' | 'ai';
+  content: string;
+  timestamp: Date;
+}
+
 type AnalysisType = 'overview' | 'security' | 'issues' | 'pullRequests' | 'contributors' | 'dependencies' | 'releases' | 'codeSearch' | 'bounties' | 'patterns' | 'similar' | 'learning' | 'vulnerabilities';
 
 const App: React.FC = () => {
@@ -31,6 +38,12 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [currentAnalysis, setCurrentAnalysis] = useState<AnalysisType>('overview');
+  
+  // Chat functionality state
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState<string>('');
+  const [chatLoading, setChatLoading] = useState<boolean>(false);
+  const [showChat, setShowChat] = useState<boolean>(false);
   
   // Additional state for advanced features
   const [code, setCode] = useState<string>('');
@@ -70,6 +83,9 @@ const App: React.FC = () => {
     setError('');
     setResult(null);
     setCurrentAnalysis(analysisType);
+    // Reset chat when new analysis starts
+    setChatMessages([]);
+    setShowChat(false);
 
     try {
       let endpoint = '';
@@ -148,6 +164,61 @@ const App: React.FC = () => {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleChatQuestion = async () => {
+    if (!chatInput.trim() || !result) return;
+
+    const userMessage: ChatMessage = {
+      id: Date.now().toString(),
+      type: 'user',
+      content: chatInput,
+      timestamp: new Date()
+    };
+
+    setChatMessages(prev => [...prev, userMessage]);
+    setChatInput('');
+    setChatLoading(true);
+
+    try {
+      const response = await axios.post(`${API_CONFIG.API_BASE_URL}/chat-about-analysis`, {
+        question: chatInput,
+        analysisType: currentAnalysis,
+        originalQuery: message,
+        previousAnalysis: result.response
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const aiMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        type: 'ai',
+        content: response.data.response || response.data.message || 'I apologize, but I couldn\'t process your question. Please try rephrasing it.',
+        timestamp: new Date()
+      };
+
+      setChatMessages(prev => [...prev, aiMessage]);
+    } catch (err: any) {
+      console.error('Chat error:', err);
+      const errorMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        type: 'ai',
+        content: 'I\'m having trouble responding right now. Please try your question again.',
+        timestamp: new Date()
+      };
+      setChatMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const handleChatKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleChatQuestion();
     }
   };
 
@@ -436,6 +507,97 @@ const App: React.FC = () => {
               >
                 💰 Find Bounties
               </button>
+            </div>
+
+            {/* AI Chat Interface */}
+            <div className="chat-section">
+              <div className="chat-header">
+                <h3>🤖 Ask AI About This Analysis</h3>
+                <button
+                  onClick={() => setShowChat(!showChat)}
+                  className="chat-toggle-btn"
+                >
+                  {showChat ? '▼ Hide Chat' : '▲ Show Chat'}
+                </button>
+              </div>
+
+              {showChat && (
+                <div className="chat-container">
+                  {chatMessages.length > 0 && (
+                    <div className="chat-messages">
+                      {chatMessages.map((msg) => (
+                        <div key={msg.id} className={`chat-message ${msg.type}`}>
+                          <div className="message-avatar">
+                            {msg.type === 'user' ? '👤' : '🤖'}
+                          </div>
+                          <div className="message-content">
+                            <div 
+                              className="message-text"
+                              dangerouslySetInnerHTML={{ __html: formatResponse(msg.content) }}
+                            />
+                            <div className="message-time">
+                              {msg.timestamp.toLocaleTimeString()}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      {chatLoading && (
+                        <div className="chat-message ai">
+                          <div className="message-avatar">🤖</div>
+                          <div className="message-content">
+                            <div className="message-text">
+                              <span className="typing-indicator">AI is thinking...</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="chat-input-container">
+                    <div className="chat-suggestions">
+                      <span className="suggestion-label">💡 Try asking:</span>
+                      <button 
+                        onClick={() => setChatInput("What are the main security concerns?")}
+                        className="suggestion-btn"
+                      >
+                        What are the main security concerns?
+                      </button>
+                      <button 
+                        onClick={() => setChatInput("How can I contribute to this project?")}
+                        className="suggestion-btn"
+                      >
+                        How can I contribute?
+                      </button>
+                      <button 
+                        onClick={() => setChatInput("Explain the technical details")}
+                        className="suggestion-btn"
+                      >
+                        Explain technical details
+                      </button>
+                    </div>
+                    
+                    <div className="chat-input-group">
+                      <textarea
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        onKeyPress={handleChatKeyPress}
+                        placeholder="Ask me anything about this analysis... (Press Enter to send)"
+                        className="chat-input"
+                        rows={2}
+                        disabled={chatLoading}
+                      />
+                      <button
+                        onClick={handleChatQuestion}
+                        disabled={chatLoading || !chatInput.trim()}
+                        className="chat-send-btn"
+                      >
+                        {chatLoading ? '⏳' : '📤'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

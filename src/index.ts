@@ -504,6 +504,30 @@ Examples:
   }
 });
 
+// New endpoint for follow-up questions about analysis
+app.post('/chat-about-analysis', async (req: Request, res: Response) => {
+  const { question, analysisType, originalQuery, previousAnalysis } = req.body;
+  
+  if (!question) {
+    return res.status(400).json({ error: 'Question is required' });
+  }
+
+  if (!previousAnalysis) {
+    return res.status(400).json({ error: 'No previous analysis context available' });
+  }
+
+  try {
+    const response = await handleAnalysisChat(question, analysisType, originalQuery, previousAnalysis);
+    res.json({ 
+      response,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Analysis chat error:', error);
+    res.status(500).json({ error: 'An error occurred while processing your question' });
+  }
+});
+
 // Agent information endpoint
 app.post('/agent-info', async (req: Request, res: Response) => {
   try {
@@ -3291,6 +3315,292 @@ async function getRecentReleases(owner: string, repo: string, limit: number = 10
 
 async function generateReleaseNotesWithAI(releases: any[], commits: any[], owner: string, repo: string): Promise<string> {
   return `📋 **Release Notes Analysis for ${owner}/${repo}**\n\n🚧 AI-powered release analysis is being enhanced!\n\n📈 **Planned Features:**\n- Automated release summaries\n- Change impact analysis\n- Version trend insights\n- Update recommendations\n\nExplore our Repository Overview for current version info!`;
+}
+
+// Handle follow-up questions about analysis results
+async function handleAnalysisChat(question: string, analysisType: string, originalQuery: string, previousAnalysis: string): Promise<string> {
+  try {
+    // Extract key information from the previous analysis
+    const analysisContext = extractAnalysisContext(previousAnalysis, analysisType);
+    
+    // Generate contextual response based on the question and analysis type
+    let response = `🤖 **AI Assistant Response**\n\n`;
+    
+    // Parse the question to understand what the user is asking about
+    const questionLower = question.toLowerCase();
+    
+    // Security-related questions
+    if (questionLower.includes('security') || questionLower.includes('vulnerabilit') || questionLower.includes('risk')) {
+      response += `🔒 **Security Focus**\n\n`;
+      if (analysisType === 'security') {
+        response += `Based on the security analysis I performed:\n\n`;
+        response += generateSecurityInsights(question, previousAnalysis);
+      } else {
+        response += `While this wasn't a security-focused analysis, here are security considerations:\n\n`;
+        response += generateGeneralSecurityAdvice(question, analysisContext);
+      }
+    }
+    
+    // Technical implementation questions
+    else if (questionLower.includes('how') || questionLower.includes('implement') || questionLower.includes('code')) {
+      response += `💻 **Technical Implementation**\n\n`;
+      response += generateTechnicalAdvice(question, analysisContext, analysisType);
+    }
+    
+    // Contribution questions
+    else if (questionLower.includes('contribute') || questionLower.includes('help') || questionLower.includes('start')) {
+      response += `🤝 **Contribution Guidance**\n\n`;
+      response += generateContributionAdvice(question, analysisContext, analysisType);
+    }
+    
+    // Learning questions
+    else if (questionLower.includes('learn') || questionLower.includes('understand') || questionLower.includes('explain')) {
+      response += `📚 **Learning & Explanation**\n\n`;
+      response += generateLearningAdvice(question, analysisContext, analysisType);
+    }
+    
+    // Performance questions
+    else if (questionLower.includes('performance') || questionLower.includes('speed') || questionLower.includes('optimize')) {
+      response += `⚡ **Performance Insights**\n\n`;
+      response += generatePerformanceAdvice(question, analysisContext, analysisType);
+    }
+    
+    // General questions
+    else {
+      response += `💡 **General Analysis Discussion**\n\n`;
+      response += generateGeneralAdvice(question, analysisContext, analysisType);
+    }
+    
+    // Add follow-up suggestions
+    response += `\n\n🎯 **Follow-up Suggestions**\n\n`;
+    response += `You might also ask about:\n`;
+    response += generateFollowUpSuggestions(analysisType, questionLower);
+    
+    return response;
+    
+  } catch (error) {
+    console.error('Error in handleAnalysisChat:', error);
+    return `🤖 I apologize, but I encountered an issue processing your question. Here's what I can tell you:\n\n` +
+           `- Your question: "${question}"\n` +
+           `- Analysis type: ${analysisType}\n` +
+           `- I'm designed to help with follow-up questions about repository analysis\n\n` +
+           `Please try rephrasing your question or ask about specific aspects like security, implementation, or contribution opportunities.`;
+  }
+}
+
+function extractAnalysisContext(analysis: string, analysisType: string): any {
+  // Extract key metrics and information from the analysis text
+  const context: any = {
+    type: analysisType,
+    hasSecurityIssues: analysis.includes('🔴') || analysis.includes('High Risk') || analysis.includes('Critical'),
+    hasGoodHealth: analysis.includes('🟢') || analysis.includes('Excellent') || analysis.includes('Good'),
+    language: extractLanguageFromAnalysis(analysis),
+    repository: extractRepositoryFromAnalysis(analysis),
+    keyMetrics: extractMetricsFromAnalysis(analysis),
+    mainPoints: extractMainPointsFromAnalysis(analysis)
+  };
+  return context;
+}
+
+function extractLanguageFromAnalysis(analysis: string): string {
+  const languageMatch = analysis.match(/language[:\s]+([A-Za-z+#]+)/i);
+  return languageMatch ? languageMatch[1] : 'Unknown';
+}
+
+function extractRepositoryFromAnalysis(analysis: string): string {
+  const repoMatch = analysis.match(/(?:for|of|Analysis for)\s+([a-zA-Z0-9-_]+\/[a-zA-Z0-9-_]+)/);
+  return repoMatch ? repoMatch[1] : 'the repository';
+}
+
+function extractMetricsFromAnalysis(analysis: string): string[] {
+  const metrics = [];
+  if (analysis.includes('stars')) metrics.push('popularity');
+  if (analysis.includes('contributors')) metrics.push('community');
+  if (analysis.includes('issues')) metrics.push('maintenance');
+  if (analysis.includes('commits')) metrics.push('activity');
+  return metrics;
+}
+
+function extractMainPointsFromAnalysis(analysis: string): string[] {
+  // Extract bullet points and key insights
+  const points = analysis.match(/^[-•]\s*.+$/gm) || [];
+  return points.slice(0, 5).map(point => point.replace(/^[-•]\s*/, ''));
+}
+
+function generateSecurityInsights(question: string, analysis: string): string {
+  let insights = ``;
+  
+  if (analysis.includes('vulnerabilit')) {
+    insights += `🚨 **Vulnerability Assessment**\n`;
+    insights += `- I found security concerns in the analysis\n`;
+    insights += `- Review the detailed findings above\n`;
+    insights += `- Consider running additional security scans\n\n`;
+  }
+  
+  insights += `🛡️ **Security Recommendations**\n`;
+  insights += `- Keep dependencies updated regularly\n`;
+  insights += `- Review code for common security patterns\n`;
+  insights += `- Consider implementing security testing in CI/CD\n`;
+  insights += `- Monitor security advisories for used technologies\n\n`;
+  
+  if (question.includes('fix') || question.includes('resolve')) {
+    insights += `🔧 **Fix Approach**\n`;
+    insights += `- Use our Vulnerability Research feature for specific CVEs\n`;
+    insights += `- Check similar repositories for fix patterns\n`;
+    insights += `- Review official security documentation\n`;
+  }
+  
+  return insights;
+}
+
+function generateGeneralSecurityAdvice(question: string, context: any): string {
+  return `- Consider running a dedicated security analysis\n` +
+         `- Security is important for ${context.language} projects\n` +
+         `- Check for dependency vulnerabilities\n` +
+         `- Review authentication and authorization patterns\n` +
+         `- Consider static code analysis tools`;
+}
+
+function generateTechnicalAdvice(question: string, context: any, analysisType: string): string {
+  let advice = ``;
+  
+  if (context.language !== 'Unknown') {
+    advice += `For ${context.language} development:\n\n`;
+  }
+  
+  advice += `**Implementation Suggestions:**\n`;
+  advice += `- Study the project's architecture patterns\n`;
+  advice += `- Review recent commits for coding standards\n`;
+  advice += `- Check the project's documentation and guidelines\n`;
+  advice += `- Look at similar functions/components for patterns\n\n`;
+  
+  if (question.includes('test')) {
+    advice += `**Testing Approach:**\n`;
+    advice += `- Review existing test patterns in the codebase\n`;
+    advice += `- Follow the project's testing conventions\n`;
+    advice += `- Consider edge cases and error handling\n\n`;
+  }
+  
+  return advice;
+}
+
+function generateContributionAdvice(question: string, context: any, analysisType: string): string {
+  let advice = `**Getting Started:**\n`;
+  advice += `- Fork ${context.repository} and set up locally\n`;
+  advice += `- Read CONTRIBUTING.md and code of conduct\n`;
+  advice += `- Look for "good first issue" labels\n`;
+  advice += `- Start with documentation or small bug fixes\n\n`;
+  
+  if (context.hasGoodHealth) {
+    advice += `✅ **Good News:** This project appears well-maintained and welcoming to contributors\n\n`;
+  }
+  
+  advice += `**Contribution Steps:**\n`;
+  advice += `1. Check open issues for opportunities\n`;
+  advice += `2. Discuss your ideas before major changes\n`;
+  advice += `3. Follow the project's style and testing guidelines\n`;
+  advice += `4. Write clear commit messages and PR descriptions\n\n`;
+  
+  return advice;
+}
+
+function generateLearningAdvice(question: string, context: any, analysisType: string): string {
+  let advice = `**Learning Opportunities:**\n\n`;
+  
+  if (context.language !== 'Unknown') {
+    advice += `📖 **${context.language} Skills:**\n`;
+    advice += `- Study the project's ${context.language} patterns\n`;
+    advice += `- Look at advanced ${context.language} features used\n`;
+    advice += `- Practice similar implementations\n\n`;
+  }
+  
+  advice += `🎯 **Key Areas to Focus On:**\n`;
+  context.mainPoints.forEach((point: string) => {
+    advice += `- ${point}\n`;
+  });
+  
+  advice += `\n💡 **Learning Strategy:**\n`;
+  advice += `- Use our Learning Path feature for structured guidance\n`;
+  advice += `- Explore similar repositories for comparison\n`;
+  advice += `- Practice by contributing small improvements\n`;
+  advice += `- Join the project's community discussions\n\n`;
+  
+  return advice;
+}
+
+function generatePerformanceAdvice(question: string, context: any, analysisType: string): string {
+  let advice = `**Performance Considerations:**\n\n`;
+  
+  advice += `🚀 **Optimization Areas:**\n`;
+  advice += `- Review the codebase for performance bottlenecks\n`;
+  advice += `- Check for efficient algorithms and data structures\n`;
+  advice += `- Look at caching strategies used\n`;
+  advice += `- Consider memory usage patterns\n\n`;
+  
+  if (context.language !== 'Unknown') {
+    advice += `⚡ **${context.language}-Specific Tips:**\n`;
+    advice += getLanguagePerformanceTips(context.language);
+  }
+  
+  return advice;
+}
+
+function generateGeneralAdvice(question: string, context: any, analysisType: string): string {
+  let advice = `Based on the ${analysisType} analysis:\n\n`;
+  
+  if (context.hasGoodHealth) {
+    advice += `✅ **Positive Indicators:**\n`;
+    advice += `- The project shows good health metrics\n`;
+    advice += `- Active community and maintenance\n`;
+    advice += `- Consider it suitable for learning or contribution\n\n`;
+  }
+  
+  advice += `🔍 **Key Insights:**\n`;
+  context.mainPoints.slice(0, 3).forEach((point: string) => {
+    advice += `- ${point}\n`;
+  });
+  
+  advice += `\n💭 **Additional Context:**\n`;
+  advice += `- This is a ${context.language} project\n`;
+  advice += `- You can explore different analysis types for more insights\n`;
+  advice += `- Feel free to ask more specific questions about any aspect\n\n`;
+  
+  return advice;
+}
+
+function generateFollowUpSuggestions(analysisType: string, question: string): string {
+  const suggestions = [];
+  
+  if (analysisType === 'overview') {
+    suggestions.push(`"What are the main security concerns?"`);
+    suggestions.push(`"How can I contribute to this project?"`);
+    suggestions.push(`"What technologies should I learn?"`);
+  } else if (analysisType === 'security') {
+    suggestions.push(`"How do I fix these vulnerabilities?"`);
+    suggestions.push(`"What security tools should I use?"`);
+    suggestions.push(`"Are there similar security issues in other projects?"`);
+  } else if (analysisType === 'patterns') {
+    suggestions.push(`"What patterns should I avoid?"`);
+    suggestions.push(`"How do these patterns compare to industry standards?"`);
+    suggestions.push(`"What can I learn from these patterns?"`);
+  }
+  
+  // Add generic suggestions
+  suggestions.push(`"Explain the technical details"`);
+  suggestions.push(`"What are the next steps?"`);
+  
+  return suggestions.slice(0, 4).map(s => `- ${s}`).join('\n');
+}
+
+function getLanguagePerformanceTips(language: string): string {
+  const tips: { [key: string]: string } = {
+    'JavaScript': '- Use async/await properly\n- Optimize DOM operations\n- Consider Web Workers for heavy tasks\n- Minimize bundle size\n\n',
+    'Python': '- Use list comprehensions\n- Consider NumPy for numerical operations\n- Profile with cProfile\n- Use appropriate data structures\n\n',
+    'Java': '- Optimize JVM settings\n- Use efficient collections\n- Consider parallel streams\n- Monitor garbage collection\n\n',
+    'Go': '- Use goroutines efficiently\n- Optimize memory allocations\n- Profile with pprof\n- Consider sync.Pool for reusable objects\n\n'
+  };
+  
+  return tips[language] || '- Profile your code to identify bottlenecks\n- Use appropriate algorithms and data structures\n- Consider caching where applicable\n\n';
 }
 
 app.listen(PORT, () => {
