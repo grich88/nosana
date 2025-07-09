@@ -16,7 +16,28 @@ const securityAnalyzer = new SecurityAnalyzer();
 app.use(cors());
 app.use(express.json());
 
-// Enhanced GitHub API function with better error handling
+// Timeout utility for fetch requests to prevent hanging
+async function fetchWithTimeout(url: string, options: any, timeoutMs: number = 10000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error(`Request timeout after ${timeoutMs}ms`);
+    }
+    throw error;
+  }
+}
+
+// Enhanced GitHub API function with better error handling and timeout
 async function getGitHubRepoInfo(owner: string, repo: string) {
   const url = `https://api.github.com/repos/${owner}/${repo}`;
   
@@ -31,7 +52,7 @@ async function getGitHubRepoInfo(owner: string, repo: string) {
   }
 
   try {
-    const response = await fetch(url, { headers });
+    const response = await fetchWithTimeout(url, { headers });
     
     if (!response.ok) {
       if (response.status === 403) {
@@ -68,9 +89,9 @@ async function getGitHubRepoInfo(owner: string, repo: string) {
     return { ...data, rate_limited: false };
   } catch (error) {
     if (error instanceof Error) {
-      if (error.message.includes('rate limit') || error.message.includes('403')) {
-        // Return fallback data for rate limit errors
-        console.warn(`Rate limit fallback for ${owner}/${repo}`);
+      if (error.message.includes('timeout') || error.message.includes('rate limit') || error.message.includes('403')) {
+        // Return fallback data for timeout or rate limit errors
+        console.warn(`API fallback for ${owner}/${repo}: ${error.message}`);
         return {
           name: repo,
           full_name: `${owner}/${repo}`,
@@ -98,46 +119,7 @@ async function getGitHubRepoInfo(owner: string, repo: string) {
   }
 }
 
-// Security analysis endpoint
-app.post('/security', async (req: Request, res: Response) => {
-  try {
-    const { message } = req.body;
-    
-    if (!message) {
-      return res.status(400).json({ error: 'Message is required' });
-    }
-    
-    const repoInfo = parseRepositoryFromMessage(message);
-    if (!repoInfo) {
-      return res.status(400).json({ 
-        error: 'Could not parse repository information. Please provide in format: owner/repo or GitHub URL' 
-      });
-    }
-    
-    const { owner, repo } = repoInfo;
-    
-    // Perform security analysis
-    const securityAnalysis = await securityAnalyzer.analyzeRepository(owner, repo);
-    
-    // Format the security response
-    const response = formatSecurityAnalysis(owner, repo, securityAnalysis);
-    
-    res.json({
-      response,
-      securityDetails: securityAnalysis,
-      timestamp: new Date().toISOString()
-    });
-    
-  } catch (error: any) {
-    console.error('Security analysis error:', error);
-    res.status(500).json({ 
-      error: 'Internal server error', 
-      message: error.message 
-    });
-  }
-});
-
-// Add analyze-security endpoint to match frontend expectations
+// CONSOLIDATED Security analysis endpoint (removed duplicate /analyze-security)
 app.post('/analyze-security', async (req: Request, res: Response) => {
   try {
     const { message } = req.body;
@@ -898,7 +880,7 @@ app.post('/find-bounties', async (req: Request, res: Response) => {
       response: analysis,
       bounties: bountyIssues,
       totalBounties: bountyIssues.length,
-      estimatedEarnings: calculateEstimatedEarnings(bountyIssues),
+      estimatedEarnings: bountyIssues.length > 0 ? calculatePotentialEarnings(bountyIssues, skills ? calculateSkillMatch(bountyIssues[0], skills, language) : 50) : { monthly: 0, successRate: 0 },
       timestamp: new Date().toISOString()
     });
     
@@ -1050,9 +1032,9 @@ async function searchGitHubForFixes(message: string, code?: string, language?: s
 
   for (const query of searchQueries.slice(0, 3)) { // Limit to 3 queries to avoid rate limits
     try {
-      // Search in code
+      // Search in code with timeout
       const codeSearchUrl = `https://api.github.com/search/code?q=${encodeURIComponent(query)}&sort=indexed&order=desc&per_page=10`;
-      const codeResponse = await fetch(codeSearchUrl, { headers });
+      const codeResponse = await fetchWithTimeout(codeSearchUrl, { headers }, 8000);
       
       if (codeResponse.ok) {
         const codeData = await codeResponse.json() as any;
@@ -1065,9 +1047,9 @@ async function searchGitHubForFixes(message: string, code?: string, language?: s
         }
       }
 
-      // Search in issues for solutions
+      // Search in issues for solutions with timeout
       const issueSearchUrl = `https://api.github.com/search/issues?q=${encodeURIComponent(query + ' is:issue state:closed')}&sort=comments&order=desc&per_page=5`;
-      const issueResponse = await fetch(issueSearchUrl, { headers });
+      const issueResponse = await fetchWithTimeout(issueSearchUrl, { headers }, 8000);
       
       if (issueResponse.ok) {
         const issueData = await issueResponse.json() as any;
@@ -1524,7 +1506,7 @@ async function searchForBountyIssues(skills?: string[], language?: string, diffi
   for (const query of bountyQueries.slice(0, 5)) { // Limit queries to avoid rate limits
     try {
       const searchUrl = `https://api.github.com/search/issues?q=${encodeURIComponent(query)}&sort=created&order=desc&per_page=10`;
-      const response = await fetch(searchUrl, { headers });
+      const response = await fetchWithTimeout(searchUrl, { headers }, 8000);
       
       if (response.ok) {
         const data = await response.json() as any;
@@ -1902,9 +1884,7 @@ function calculatePotentialEarnings(bounties: any[], skillMatch: number): { mont
   };
 }
 
-function calculateEstimatedEarnings(bountyIssues: any[]): any {
-  return { total: 0, breakdown: { easy: { count: 0, value: 0 }, medium: { count: 0, value: 0 }, hard: { count: 0, value: 0 } } };
-}
+
 
 async function analyzeCodePatterns(owner: string, repo: string): Promise<any[]> {
   // Get repository information to analyze patterns
@@ -2129,7 +2109,7 @@ async function findSimilarRepositories(owner: string, repo: string): Promise<any
         headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
       }
 
-      const response = await fetch(searchUrl, { headers });
+      const response = await fetchWithTimeout(searchUrl, { headers }, 8000);
       
       if (response.ok) {
         const searchResults = await response.json() as any;
@@ -2165,7 +2145,7 @@ async function findSimilarRepositories(owner: string, repo: string): Promise<any
         headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
       }
 
-      const response = await fetch(searchUrl, { headers });
+      const response = await fetchWithTimeout(searchUrl, { headers }, 8000);
       
       if (response.ok) {
         const searchResults = await response.json() as any;
@@ -2532,7 +2512,7 @@ async function searchVulnerabilityFixes(vulnerabilityType?: string, cveId?: stri
       }
 
       try {
-        const response = await fetch(searchUrl, { headers });
+        const response = await fetchWithTimeout(searchUrl, { headers }, 8000);
         
         if (response.ok) {
           const searchResults = await response.json() as any;
@@ -2792,7 +2772,7 @@ async function getOpenIssues(owner: string, repo: string, limit: number = 20): P
   }
 
   try {
-    const response = await fetch(url, { headers });
+    const response = await fetchWithTimeout(url, { headers }, 8000);
     
     if (!response.ok) {
       if (response.status === 403) {
@@ -2965,7 +2945,7 @@ async function getRecentPullRequests(owner: string, repo: string, limit: number 
   }
 
   try {
-    const response = await fetch(url, { headers });
+    const response = await fetchWithTimeout(url, { headers }, 8000);
     
     if (!response.ok) {
       if (response.status === 403) {
@@ -3131,7 +3111,7 @@ async function getContributors(owner: string, repo: string, limit: number = 30):
   }
 
   try {
-    const response = await fetch(url, { headers });
+    const response = await fetchWithTimeout(url, { headers }, 8000);
     
     if (!response.ok) {
       if (response.status === 403) {
@@ -3161,7 +3141,7 @@ async function getRecentCommits(owner: string, repo: string, limit: number = 30)
   }
 
   try {
-    const response = await fetch(url, { headers });
+    const response = await fetchWithTimeout(url, { headers }, 8000);
     
     if (!response.ok) {
       if (response.status === 403) {
@@ -3296,7 +3276,7 @@ async function getRecentReleases(owner: string, repo: string, limit: number = 10
   }
 
   try {
-    const response = await fetch(url, { headers });
+    const response = await fetchWithTimeout(url, { headers }, 8000);
     
     if (!response.ok) {
       if (response.status === 403) {
