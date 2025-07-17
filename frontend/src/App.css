@@ -994,3 +994,344 @@ body {
     font-size: 0.9rem;
   }
 }
+
+/* Wallet Integration Styles */
+.wallet-toggle {
+  text-align: center;
+  margin: 20px 0;
+}
+
+.wallet-toggle-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 1em;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+}
+
+.wallet-toggle-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+}
+
+.wallet-toggle-btn.connected {
+  background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+}
+
+.wallet-toggle-btn.disconnected {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.wallet-deployment-section {
+  margin: 20px 0;
+  padding: 20px;
+  background: rgba(255,255,255,0.02);
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+/* Mobile Responsiveness for Wallet Features */
+@media (max-width: 768px) {
+  .wallet-toggle-btn {
+    padding: 10px 20px;
+    font-size: 0.9em;
+  }
+  
+  .wallet-deployment-section {
+    margin: 15px 0;
+    padding: 15px;
+  }
+}
+
+/* Nosana Deployer Styles */
+.nosana-deployer {
+  background: linear-gradient(135deg, #2E3440 0%, #3B4252 100%);
+  padding: 25px;
+  border-radius: 12px;
+  color: white;
+  margin: 20px 0;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+}
+
+.nosana-deployer h2 {
+  margin: 0 0 20px 0;
+  text-align: center;
+  font-size: 1.6em;
+}
+
+.connection-status {
+  background: rgba(255,255,255,0.1);
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.connected {
+  color: #4CAF50;
+}
+
+.not-connected {
+  color: #FF9800;
+}
+
+.deployment-form {
+  background: rgba(255,255,255,0.05);
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #555;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.1);
+  color: white;
+  font-size: 1em;
+}
+
+.form-group input.valid {
+  border-color: #4CAF50;
+}
+
+.form-group input.invalid {
+  border-color: #f44336;
+}
+
+.validation-message {
+  margin: 5px 0 0 0;
+  font-size: 0.9em;
+}
+
+.validation-message.valid {
+  color: #4CAF50;
+}
+
+.validation-message.invalid {
+  color: #f44336;
+}
+
+.tier-description,
+.timeout-description {
+  margin: 5px 0 0 0;
+  font-size: 0.9em;
+  color: #ccc;
+}
+
+.cost-estimate {
+  background: rgba(255,255,255,0.1);
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.cost-estimate h3 {
+  margin: 0 0 10px 0;
+}
+
+.cost-breakdown p {
+  margin: 5px 0;
+}
+
+.balance-check {
+  margin-top: 10px;
+  padding: 8px;
+  border-radius: 4px;
+}
+
+.balance-check.sufficient {
+  background: rgba(76, 175, 80, 0.2);
+  border: 1px solid #4CAF50;
+}
+
+.balance-check.insufficient {
+  background: rgba(255, 152, 0, 0.2);
+  border: 1px solid #FF9800;
+}
+
+.deploy-btn {
+  width: 100%;
+  background: #4CAF50;
+  color: white;
+  border: none;
+  padding: 15px;
+  border-radius: 8px;
+  font-size: 1.2em;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.deploy-btn:hover:not(:disabled) {
+  background: #45a049;
+  transform: translateY(-2px);
+}
+
+.deploy-btn:disabled {
+  background: #666;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.deployment-result {
+  padding: 15px;
+  border-radius: 8px;
+  margin: 20px 0;
+}
+
+.deployment-result.success {
+  background: rgba(76, 175, 80, 0.2);
+  border: 1px solid #4CAF50;
+}
+
+.deployment-result.error {
+  background: rgba(244, 67, 54, 0.2);
+  border: 1px solid #f44336;
+}
+
+.deployment-result h3 {
+  margin: 0 0 10px 0;
+}
+
+.success-details {
+  margin-top: 10px;
+}
+
+.success-details a {
+  color: #4CAF50;
+  text-decoration: none;
+}
+
+.job-history {
+  margin-top: 20px;
+}
+
+.job-history h3 {
+  margin: 0 0 15px 0;
+}
+
+.job-item {
+  background: rgba(255,255,255,0.05);
+  border-radius: 8px;
+  margin-bottom: 15px;
+  overflow: hidden;
+}
+
+.job-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+}
+
+.job-info p {
+  margin: 5px 0;
+}
+
+.status {
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  font-size: 0.8em;
+}
+
+.status.running {
+  background: #2196F3;
+}
+
+.status.completed {
+  background: #4CAF50;
+}
+
+.status.failed {
+  background: #f44336;
+}
+
+.job-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.endpoint-btn,
+.logs-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  text-decoration: none;
+  font-size: 0.9em;
+}
+
+.endpoint-btn {
+  background: #4CAF50;
+  color: white;
+}
+
+.logs-btn {
+  background: #2196F3;
+  color: white;
+}
+
+.job-logs {
+  border-top: 1px solid rgba(255,255,255,0.1);
+  padding: 15px;
+}
+
+.job-logs h4 {
+  margin: 0 0 10px 0;
+}
+
+.logs-container {
+  background: #1e1e1e;
+  padding: 10px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.9em;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.log-line {
+  margin: 2px 0;
+  color: #00ff00;
+}
+
+/* Responsive design for Nosana deployment components */
+@media (max-width: 768px) {
+  .job-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  
+  .job-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+  
+  .endpoint-btn,
+  .logs-btn {
+    flex: 1;
+    text-align: center;
+  }
+  
+  .nosana-deployer {
+    padding: 15px;
+    margin: 15px 0;
+  }
+}

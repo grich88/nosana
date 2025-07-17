@@ -1016,6 +1016,205 @@ app.post('/search-vulnerability-fixes', async (req: Request, res: Response) => {
   }
 });
 
+// Wallet balance endpoint
+app.post('/wallet-balance', async (req: Request, res: Response) => {
+  try {
+    const { publicKey } = req.body;
+    
+    if (!publicKey) {
+      return res.status(400).json({ error: 'Public key is required' });
+    }
+
+    // Simulate wallet balance retrieval
+    const balances = {
+      sol: Number((Math.random() * 1 + 0.1).toFixed(4)), // 0.1 to 1.1 SOL
+      nos: Number((Math.random() * 100 + 10).toFixed(2))  // 10 to 110 NOS
+    };
+
+    res.json({
+      publicKey,
+      balances,
+      message: 'Wallet balance retrieved successfully'
+    });
+  } catch (error) {
+    console.error('Wallet balance error:', error);
+    res.status(500).json({ error: 'Failed to retrieve wallet balance' });
+  }
+});
+
+// Nosana deployment cost calculation endpoint
+app.post('/calculate-deployment-cost', async (req: Request, res: Response) => {
+  try {
+    const { duration = 24, gpuTier = 'nvidia-3060' } = req.body;
+    
+    // Nosana pricing (estimated)
+    const hourlyRates = {
+      'nvidia-3060': { sol: 0.001, nos: 0.5 },    // ~$0.10/hour
+      'nvidia-4090': { sol: 0.003, nos: 1.5 },    // ~$0.30/hour  
+      'nvidia-a100': { sol: 0.005, nos: 2.5 }     // ~$0.50/hour
+    };
+
+    const rate = hourlyRates[gpuTier as keyof typeof hourlyRates] || hourlyRates['nvidia-3060'];
+    const totalSOL = rate.sol * duration;
+    const totalNOS = rate.nos * duration;
+
+    res.json({
+      estimatedCostSOL: Number(totalSOL.toFixed(4)),
+      estimatedCostNOS: Number(totalNOS.toFixed(2)),
+      duration: `${duration} hours`,
+      gpuTier,
+      breakdown: {
+        hourlyRateSOL: rate.sol,
+        hourlyRateNOS: rate.nos,
+        totalHours: duration
+      }
+    });
+  } catch (error) {
+    console.error('Cost calculation error:', error);
+    res.status(500).json({ error: 'Failed to calculate deployment cost' });
+  }
+});
+
+// Nosana deployment endpoint (simulation)
+app.post('/deploy-to-nosana', async (req: Request, res: Response) => {
+  try {
+    const { dockerImage, walletAddress, gpuTier = 'nvidia-3060', timeout = 30 } = req.body;
+    
+    if (!dockerImage || !walletAddress) {
+      return res.status(400).json({ error: 'Docker image and wallet address are required' });
+    }
+
+    // Validate docker image format
+    const dockerImageRegex = /^([a-zA-Z0-9._-]+\/)?([a-zA-Z0-9._-]+)(:[a-zA-Z0-9._-]+)?$/;
+    if (!dockerImageRegex.test(dockerImage)) {
+      return res.status(400).json({ error: 'Invalid Docker image format' });
+    }
+
+    // Simulate deployment process
+    await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate network delay
+
+    const jobId = 'job_' + Math.random().toString(36).substr(2, 9);
+    const endpoint = `https://${jobId.slice(4, 12)}.nosana.io`;
+    
+    // Calculate cost
+    const hourlyRates = {
+      'nvidia-3060': 0.5,
+      'nvidia-4090': 1.5,
+      'nvidia-a100': 3.0
+    };
+    
+    const rate = hourlyRates[gpuTier as keyof typeof hourlyRates] || 0.5;
+    const estimatedCost = Number((rate * (timeout / 60)).toFixed(2));
+
+    res.json({
+      success: true,
+      jobId,
+      endpoint,
+      estimatedCost,
+      gpuTier,
+      timeout,
+      dockerImage,
+      walletAddress,
+      message: 'Agent successfully deployed to Nosana network!',
+      deploymentDetails: {
+        image: dockerImage,
+        gpu: gpuTier,
+        timeoutMinutes: timeout,
+        estimatedCostNOS: estimatedCost,
+        status: 'deploying',
+        created: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('Deployment error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Deployment failed',
+      message: `Failed to deploy to Nosana: ${error instanceof Error ? error.message : 'Unknown error'}`
+    });
+  }
+});
+
+// Nosana job status endpoint
+app.get('/nosana-job/:jobId', async (req: Request, res: Response) => {
+  try {
+    const { jobId } = req.params;
+    
+    if (!jobId) {
+      return res.status(400).json({ error: 'Job ID is required' });
+    }
+
+    // Simulate job status retrieval
+    const mockStatus = {
+      id: jobId,
+      status: 'running',
+      created: new Date(Date.now() - 10 * 60 * 1000), // 10 minutes ago
+      started: new Date(Date.now() - 8 * 60 * 1000),  // 8 minutes ago
+      endpoint: `https://${jobId.slice(0, 8)}.nosana.io`,
+      cost: {
+        estimated: 2.5,
+        actual: 1.8
+      },
+      logs: [
+        '[2025-01-09T12:00:00Z] Starting container...',
+        '[2025-01-09T12:00:15Z] Installing dependencies...',
+        '[2025-01-09T12:01:30Z] Building application...',
+        '[2025-01-09T12:02:45Z] Starting server on port 3000...',
+        '[2025-01-09T12:03:00Z] GitHub Insights Agent ready!',
+        '[2025-01-09T12:03:15Z] Health check endpoint active',
+        '[2025-01-09T12:03:30Z] All systems operational'
+      ]
+    };
+
+    res.json(mockStatus);
+  } catch (error) {
+    console.error('Job status error:', error);
+    res.status(500).json({ error: 'Failed to retrieve job status' });
+  }
+});
+
+// Nosana network statistics endpoint
+app.get('/nosana-network-stats', async (req: Request, res: Response) => {
+  try {
+    // Simulate network statistics
+    const stats = {
+      totalNodes: 1247,
+      activeJobs: 89,
+      averagePrice: 1.2,
+      availability: 94.7,
+      gpuTiers: [
+        {
+          id: 'nvidia-3060',
+          name: 'NVIDIA RTX 3060',
+          available: 156,
+          pricePerHour: 0.5,
+          utilizationRate: 78.5
+        },
+        {
+          id: 'nvidia-4090',
+          name: 'NVIDIA RTX 4090',
+          available: 89,
+          pricePerHour: 1.5,
+          utilizationRate: 85.2
+        },
+        {
+          id: 'nvidia-a100',
+          name: 'NVIDIA A100',
+          available: 23,
+          pricePerHour: 3.0,
+          utilizationRate: 92.1
+        }
+      ],
+      lastUpdated: new Date().toISOString()
+    };
+
+    res.json(stats);
+  } catch (error) {
+    console.error('Network stats error:', error);
+    res.status(500).json({ error: 'Failed to retrieve network statistics' });
+  }
+});
+
 // Replace stub with actual GitHub code search implementation
 async function searchGitHubForFixes(message: string, code?: string, language?: string, errorType?: string): Promise<any[]> {
   const searchQueries = buildSearchQueries(message, code, language, errorType);

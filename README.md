@@ -20,18 +20,32 @@ This project is built for the [Nosana Builders Challenge](https://earn.superteam
 - **Community Analysis**: Contributor activity and engagement insights
 - **Trend Detection**: Identifies activity patterns and project vitality
 
+### 👻 **Phantom Wallet Integration**
+- **Wallet Connection**: Seamless Phantom wallet integration
+- **Token Balance Display**: Real-time SOL and NOS balance tracking
+- **Deployment Cost Calculator**: Estimate Nosana compute costs
+- **Faucet Integration**: Direct links to token faucets for challenge participants
+
+### 🚀 **Nosana Network Deployment**
+- **Direct Deployment**: Deploy agents to Nosana directly from the web interface
+- **GPU Tier Selection**: Choose from NVIDIA RTX 3060, 4090, or A100
+- **Real-time Job Monitoring**: Track deployment status and logs
+- **Cost Management**: Pre-deployment balance checking and cost estimation
+
 ### 🛠️ **Technical Excellence**
 - Built with Mastra framework for robust agent orchestration
 - Custom tools with proper error handling and rate limiting
 - RESTful API with health checks and monitoring
 - Docker containerization for easy deployment on Nosana
 - TypeScript for type safety and better development experience
+- Solana blockchain integration with wallet adapter
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - Node.js 18+ 
 - npm or pnpm
+- [Ollama](https://ollama.ai) installed for local LLM (qwen2.5:1.5b)
 - GitHub Personal Access Token (optional, for higher rate limits)
 
 ### Installation
@@ -43,9 +57,17 @@ This project is built for the [Nosana Builders Challenge](https://earn.superteam
    npm install
    ```
 
-2. **Environment Configuration**
+2. **Setup Ollama (Required for Challenge)**
    ```bash
-   cp env.template .env
+   # Install Ollama first: https://ollama.ai
+   ollama serve
+   ollama pull qwen2.5:1.5b
+   ollama run qwen2.5:1.5b
+   ```
+
+3. **Environment Configuration**
+   ```bash
+   cp env.example .env
    ```
    
    Edit `.env` with your configuration:
@@ -88,18 +110,44 @@ Visit `http://localhost:3000/agent-info` to see available endpoints.
 
 ## 🐳 Docker Deployment
 
-### Build the image
+### Build and Push to Registry
 ```bash
-docker build -t nosana-github-agent .
+# Build and tag (replace 'yourusername' with your Docker Hub username)
+docker build -t yourusername/agent-challenge:latest .
+
+# Run locally to test
+docker run -p 3000:3000 --env-file .env yourusername/agent-challenge:latest
+
+# Login to Docker Hub
+docker login
+
+# Push to registry
+docker push yourusername/agent-challenge:latest
 ```
 
-### Run locally
-```bash
-docker run -p 3000:3000 --env-file .env nosana-github-agent
-```
+## 🚀 Nosana Deployment
 
-### Deploy on Nosana
-The agent is optimized for Nosana's GPU network deployment. Follow the Nosana deployment guide in their documentation.
+### Option A: Using Nosana CLI
+1. **Edit the job definition**
+   ```bash
+   # Update nos_job_def/nosana_mastra.json
+   # Change "image": "docker.io/yourusername/agent-challenge:latest"
+   ```
+
+2. **Install Nosana CLI and deploy**
+   ```bash
+   npm install -g @nosana/cli
+   nosana address  # Get your wallet address
+   # Request funds in Discord #nosana-challenge-faucet
+   nosana job post --file nos_job_def/nosana_mastra.json --market nvidia-3060 --timeout 30
+   ```
+
+### Option B: Using Nosana Dashboard
+1. Install [Phantom Wallet](https://phantom.com) browser extension
+2. Request funds in Discord #nosana-challenge-faucet (include your repo link)
+3. Go to [Nosana Dashboard](https://dashboard.nosana.io)
+4. Copy content from `nos_job_def/nosana_mastra.json`
+5. Choose appropriate GPU and deploy
 
 ## 💬 Usage Examples
 
@@ -152,24 +200,39 @@ The agent evaluates repositories using multiple indicators:
 | **ARCHIVED** | Explicitly marked as archived |
 | **EXPERIMENTAL** | Recent creation, low activity, or marked experimental |
 
-## 🎯 Innovation Highlights
+## 🏆 Nosana Challenge Submission
 
-### Multi-Tool Orchestration
+### Submission Checklist
+- ✅ **Fork & Development**: Repository forked and agent developed
+- ✅ **Custom Tools**: GitHub API integration with multiple tools
+- ✅ **Documentation**: Comprehensive README with setup instructions
+- ✅ **Environment Config**: `.env.example` file provided
+- ✅ **Docker Container**: Built and ready for registry push
+- ✅ **Nosana Job Definition**: `nos_job_def/nosana_mastra.json` configured
+- 🔄 **Container Registry**: Push to Docker Hub (update image URL in job definition)
+- 🔄 **Nosana Deployment**: Deploy on Nosana network and get job ID
+- 🔄 **Video Demo**: Record 1-3 minute demonstration
+- 🔄 **Social Media**: Post on X with @nosana_ai and #NosanaAgentChallenge
+- 🔄 **Final Submission**: Submit on [SuperTeam platform](https://earn.superteam.fun/agent-challenge)
+
+### Innovation Highlights
+
+#### Multi-Tool Orchestration
 The agent seamlessly combines multiple GitHub API calls to provide comprehensive insights - demonstrating the power of AI agent workflows.
 
-### Intelligent Analysis
+#### Intelligent Analysis
 Beyond raw statistics, the agent provides context-aware health assessments and actionable recommendations based on repository patterns.
 
-### Real-World Impact
+#### Real-World Impact
 - **For Developers**: Quick project evaluation for contributions or dependencies
 - **For Project Managers**: Repository health monitoring and community insights  
 - **For Researchers**: Automated analysis of open source project ecosystems
 
-### Technical Excellence
+#### Technical Excellence
 - Robust error handling with meaningful user feedback
 - Rate limiting awareness and optimization
 - Structured data schemas for reliable tool integration
-- Production-ready containerization
+- Production-ready containerization optimized for Nosana
 
 ## 🔄 Future Enhancements
 

@@ -1,0 +1,56 @@
+{
+  "name": "nosana-github-insights-agent",
+  "version": "1.0.0",
+  "description": "AI agent that provides GitHub repository insights with health assessments using Mastra framework",
+  "image": "docker.io/yourusername/agent-challenge:latest",
+  "ports": [
+    {
+      "containerPort": 3000,
+      "protocol": "TCP"
+    }
+  ],
+  "env": [
+    {
+      "name": "PORT",
+      "value": "3000"
+    },
+    {
+      "name": "NODE_ENV", 
+      "value": "production"
+    },
+    {
+      "name": "LLM_PROVIDER",
+      "value": "ollama"
+    },
+    {
+      "name": "LLM_MODEL",
+      "value": "qwen2.5:32b"
+    },
+    {
+      "name": "NOSANA_ENDPOINT",
+      "value": "https://4qvrhtl5tvy69ca2veau9dxhpt43lbpofdjbu6r21wvv.node.k8s.prd.nos.ci/"
+    }
+  ],
+  "resources": {
+    "requests": {
+      "memory": "2Gi",
+      "cpu": "1"
+    },
+    "limits": {
+      "memory": "4Gi", 
+      "cpu": "2"
+    }
+  },
+  "replicas": 1,
+  "restartPolicy": "Always",
+  "healthCheck": {
+    "httpGet": {
+      "path": "/health",
+      "port": 3000
+    },
+    "initialDelaySeconds": 30,
+    "periodSeconds": 10,
+    "timeoutSeconds": 5,
+    "failureThreshold": 3
+  }
+} 

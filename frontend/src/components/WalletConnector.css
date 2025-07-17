@@ -1,0 +1,206 @@
+.wallet-connector {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 20px;
+  border-radius: 12px;
+  color: white;
+  margin: 20px 0;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+}
+
+.wallet-status h3 {
+  margin: 0 0 15px 0;
+  font-size: 1.4em;
+  text-align: center;
+}
+
+.connect-section {
+  text-align: center;
+}
+
+.connect-btn {
+  background: #4CAF50;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 1.1em;
+  cursor: pointer;
+  margin: 10px 0;
+  transition: all 0.3s ease;
+}
+
+.connect-btn:hover:not(:disabled) {
+  background: #45a049;
+  transform: translateY(-2px);
+}
+
+.connect-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error-message {
+  background: rgba(255,0,0,0.1);
+  border: 1px solid #ff4444;
+  border-radius: 8px;
+  padding: 10px;
+  margin: 10px 0;
+}
+
+.install-link {
+  color: #4CAF50;
+  text-decoration: none;
+  display: inline-block;
+  margin-top: 5px;
+}
+
+.connected-section {
+  text-align: left;
+}
+
+.balance-section {
+  background: rgba(255,255,255,0.1);
+  padding: 15px;
+  border-radius: 8px;
+  margin: 10px 0;
+}
+
+.balance-section h4 {
+  margin: 0 0 10px 0;
+}
+
+.balances {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.balance-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255,255,255,0.1);
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+
+.balance-value {
+  font-weight: bold;
+  font-family: monospace;
+}
+
+.refresh-btn {
+  background: #2196F3;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9em;
+}
+
+.deployment-cost {
+  background: rgba(255,255,255,0.1);
+  padding: 15px;
+  border-radius: 8px;
+  margin: 10px 0;
+}
+
+.deployment-cost h4 {
+  margin: 0 0 10px 0;
+}
+
+.cost-breakdown {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.cost-item {
+  display: flex;
+  justify-content: space-between;
+  background: rgba(255,255,255,0.1);
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+
+.balance-status.sufficient {
+  background: rgba(76, 175, 80, 0.2);
+  border: 1px solid #4CAF50;
+  padding: 10px;
+  border-radius: 6px;
+}
+
+.balance-status.insufficient {
+  background: rgba(255, 152, 0, 0.2);
+  border: 1px solid #FF9800;
+  padding: 10px;
+  border-radius: 6px;
+}
+
+.faucet-btn {
+  background: #FF9800;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-top: 5px;
+}
+
+.faucet-info {
+  background: rgba(255,255,255,0.1);
+  padding: 15px;
+  border-radius: 8px;
+  margin: 10px 0;
+}
+
+.faucet-info h4, .faucet-info h5 {
+  margin: 0 0 10px 0;
+}
+
+.faucet-info ol, .faucet-info ul {
+  margin: 10px 0;
+  padding-left: 20px;
+}
+
+.discord-link {
+  background: #7289da;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 6px;
+  text-decoration: none;
+  display: inline-block;
+  margin-top: 10px;
+}
+
+.wallet-actions {
+  text-align: center;
+  margin-top: 15px;
+}
+
+.disconnect-btn {
+  background: #f44336;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.disconnect-btn:hover:not(:disabled) {
+  background: #d32f2f;
+}
+
+@media (max-width: 768px) {
+  .balances, .cost-breakdown {
+    grid-template-columns: 1fr;
+  }
+  
+  .wallet-connector {
+    padding: 15px;
+    margin: 15px 0;
+  }
+} 

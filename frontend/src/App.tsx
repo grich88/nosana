@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import './App.css';
 import { API_CONFIG } from './config';
+import WalletConnector from './components/WalletConnector';
+import NosanaDeployer from './components/NosanaDeployer';
 
 interface AnalysisResult {
   response: string;
@@ -32,12 +34,25 @@ interface ChatMessage {
 
 type AnalysisType = 'overview' | 'security' | 'issues' | 'pullRequests' | 'contributors' | 'dependencies' | 'releases' | 'codeSearch' | 'bounties' | 'patterns' | 'similar' | 'learning' | 'vulnerabilities';
 
+interface WalletInfo {
+  connected: boolean;
+  publicKey: string | null;
+  balances: {
+    sol: number;
+    nos: number;
+  };
+}
+
 const App: React.FC = () => {
   const [message, setMessage] = useState<string>('');
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [currentAnalysis, setCurrentAnalysis] = useState<AnalysisType>('overview');
+  
+  // Wallet state
+  const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
+  const [showWalletSection, setShowWalletSection] = useState<boolean>(false);
   
   // Chat functionality state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -67,6 +82,15 @@ const App: React.FC = () => {
     { id: 'learning', label: '📚 Learning Path', description: 'AI learning roadmap' },
     { id: 'vulnerabilities', label: '🛡️ Vuln Fixes', description: 'Security fix search' }
   ];
+
+  // Wallet event handlers
+  const handleWalletConnect = (wallet: WalletInfo) => {
+    setWalletInfo(wallet);
+  };
+
+  const handleWalletDisconnect = () => {
+    setWalletInfo(null);
+  };
 
   const handleAnalysis = async (analysisType: AnalysisType) => {
     if (!message.trim() && !['bounties'].includes(analysisType)) {
@@ -394,7 +418,32 @@ const App: React.FC = () => {
           <h1>🚀 Nosana GitHub Insights Agent</h1>
           <p className="subtitle">AI-Powered Repository Analysis & Code Intelligence Platform</p>
           <div className="version-badge">v3.0.0 - Enterprise Edition</div>
+          
+          {/* Wallet Toggle Button */}
+          <div className="wallet-toggle">
+            <button 
+              onClick={() => setShowWalletSection(!showWalletSection)}
+              className={`wallet-toggle-btn ${walletInfo?.connected ? 'connected' : 'disconnected'}`}
+            >
+              {walletInfo?.connected ? (
+                <>🌟 Wallet Connected ({walletInfo.balances.sol.toFixed(2)} SOL, {walletInfo.balances.nos.toFixed(1)} NOS)</>
+              ) : (
+                <>👻 Connect Phantom Wallet</>
+              )}
+            </button>
+          </div>
         </header>
+
+        {/* Wallet & Deployment Section */}
+        {showWalletSection && (
+          <div className="wallet-deployment-section">
+            <WalletConnector 
+              onWalletConnect={handleWalletConnect}
+              onWalletDisconnect={handleWalletDisconnect}
+            />
+            <NosanaDeployer walletInfo={walletInfo} />
+          </div>
+        )}
 
         <div className="analysis-types">
           {analysisTypes.map((type) => (
@@ -624,11 +673,14 @@ const App: React.FC = () => {
                 <span className="tech-badge">GitHub API</span>
                 <span className="tech-badge">AI/ML</span>
                 <span className="tech-badge">TypeScript</span>
+                <span className="tech-badge">Solana</span>
+                <span className="tech-badge">Phantom</span>
+                <span className="tech-badge">Nosana</span>
               </div>
             </div>
           </div>
           <div className="footer-bottom">
-            <p>Built for <strong>Nosana Builders Challenge</strong> • Enterprise GitHub Intelligence Platform</p>
+            <p>Built for <strong>Nosana Builders Challenge</strong> • Enterprise GitHub Intelligence Platform with Wallet Integration</p>
           </div>
         </footer>
       </div>
